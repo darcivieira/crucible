@@ -55,3 +55,4 @@ Use este índice conforme o que você precisa fazer.
 ## Exemplos
 
 - [Projeto básico local](../examples/basic/)
+- [Saída estruturada com JSON Schema](../examples/structured-output/)

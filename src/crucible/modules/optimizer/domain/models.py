@@ -25,6 +25,8 @@ ProviderName = Literal[
 ModelRole = Literal["target", "reasoning", "judge", "embedding"]
 ExecutionBackendName = Literal["local", "distributed", "ray", "dask"]
 SelectionStrategy = Literal["quality", "multi_objective"]
+ModelApiMode = Literal["chat_completions", "responses"]
+OutputFormatType = Literal["text", "json_object", "json_schema"]
 RunStatus = Literal["running", "completed", "failed", "aborted"]
 StopReason = Literal[
     "threshold_reached",
@@ -139,11 +141,26 @@ class ProviderRateLimit(BaseModel):
     retry_backoff_seconds: float = Field(default=0.5, ge=0.0)
 
 
+class ModelOutputFormat(BaseModel):
+    type: OutputFormatType = "text"
+    name: str = "crucible_output"
+    strict: bool = True
+    schema_: dict[str, Any] = Field(default_factory=dict, alias="schema")
+    provider_options: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def content_hash(self) -> str:
+        payload = json.dumps(self.model_dump(by_alias=True), sort_keys=True, default=str)
+        return sha256(payload.encode()).hexdigest()[:12]
+
+
 class ModelSpec(BaseModel):
     provider: ProviderName
     model_id: str
     role: ModelRole
+    api_mode: ModelApiMode = "chat_completions"
     params: ModelParams = Field(default_factory=ModelParams)
+    output_format: ModelOutputFormat = Field(default_factory=ModelOutputFormat)
     rate_limit: ProviderRateLimit = Field(default_factory=ProviderRateLimit)
     cost_per_million_input_tokens_usd: float = 0.0
     cost_per_million_output_tokens_usd: float = 0.0

@@ -32,6 +32,7 @@ target_model:
   provider: ollama
   model_id: gemma3:4b
   role: target
+  api_mode: chat_completions
   params:
     temperature: 0.0
     max_tokens: 1024
@@ -48,6 +49,8 @@ target_model:
   context_window: 8192
   supports_json_mode: false
   supports_tool_use: false
+  output_format:
+    type: text
 
 reasoning_model:
   provider: openai
@@ -142,6 +145,7 @@ regressões e outputs instáveis.
 provider: openai
 model_id: gpt-5
 role: reasoning
+api_mode: chat_completions
 params:
   temperature: 0.0
   max_tokens: 2048
@@ -158,7 +162,64 @@ cost_per_million_output_tokens_usd: 10.0
 context_window: 128000
 supports_json_mode: true
 supports_tool_use: false
+output_format:
+  type: json_schema
+  name: summary_output
+  strict: true
+  schema:
+    type: object
+    additionalProperties: false
+    required: [summary]
+    properties:
+      summary:
+        type: string
 ```
+
+## Output Format
+
+`output_format` descreve o contrato de saída solicitado ao provider. Ele é diferente
+do prompt: o prompt orienta o modelo; o output format vai no payload da API quando o
+provider suporta saída estruturada.
+
+Valores:
+
+- `text`: resposta livre, padrão.
+- `json_object`: pede JSON válido, sem garantir schema específico.
+- `json_schema`: pede aderência a um JSON Schema.
+
+Exemplo com OpenAI Responses API:
+
+```yaml
+target_model:
+  provider: openai
+  model_id: gpt-5-mini
+  role: target
+  api_mode: responses
+  output_format:
+    type: json_schema
+    name: summary_output
+    strict: true
+    schema:
+      type: object
+      additionalProperties: false
+      required: [summary, risk]
+      properties:
+        summary:
+          type: string
+        risk:
+          type: string
+          enum: [low, medium, high]
+```
+
+No adapter OpenAI com `api_mode: responses`, isso é enviado como `text.format`. No
+modo Chat Completions e providers OpenAI-compatible, é enviado como
+`response_format`. Em Ollama, vira `format`.
+
+Use `output_format` junto com uma assertion estrutural no gabarito, por exemplo
+`json_schema` ou `field_by_field`. O primeiro solicita o formato ao modelo; a
+assertion mede se o resultado cumpriu o contrato.
+
+Veja exemplos completos em `examples/structured-output/`.
 
 ## Papéis
 

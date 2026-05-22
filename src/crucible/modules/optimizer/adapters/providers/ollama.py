@@ -23,6 +23,10 @@ class OllamaAdapter(HttpProvider):
         }
         if params.seed is not None:
             data["options"]["seed"] = params.seed
+        if self.spec.output_format.type == "json_object":
+            data["format"] = "json"
+        elif self.spec.output_format.type == "json_schema":
+            data["format"] = self.spec.output_format.schema_
         data.update(params.extra)
         return data
 

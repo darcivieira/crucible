@@ -70,6 +70,20 @@ Use tags para:
 Esse breakdown é útil para diferenciar falha de formato, falha estrutural e falha
 semântica.
 
+## Output Format Versus Assertion
+
+Quando o usuário configura `target_model.output_format`, o Crucible passa um contrato
+de saída para o provider. Isso pode fazer o modelo menor ou SLM responder em JSON ou
+aderir a um schema antes mesmo da avaliação.
+
+A assertion continua necessária. Ela é a medição empírica do contrato:
+
+- `output_format`: solicita/força formato na chamada ao modelo.
+- `json_schema`, `json_equal`, `field_by_field`: validam o output retornado.
+
+Essa separação importa porque nem todo provider garante schema com a mesma força, e
+alguns modelos podem ignorar parcialmente o contrato.
+
 ## Worst Cases
 
 `worst_case_ids` mantém até 10 casos com menor score na iteração. Esses casos são

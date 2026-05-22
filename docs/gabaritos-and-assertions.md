@@ -116,6 +116,10 @@ assertion:
     required: [status]
 ```
 
+`json_schema` aqui é uma assertion: ela valida o output depois que o modelo responde.
+Para também pedir que o provider force a saída estruturada na chamada do modelo, use
+`target_model.output_format` em `config.yaml`.
+
 ## Assertions Estruturais
 
 ### `field_by_field`

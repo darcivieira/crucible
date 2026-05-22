@@ -16,6 +16,7 @@ from crucible.modules.optimizer.domain.assertions import (
 from crucible.modules.optimizer.domain.models import (
     CostEstimate,
     Gabarito,
+    ModelOutputFormat,
     ModelParams,
     ModelSpec,
     OptimizationConfig,
@@ -36,6 +37,7 @@ __all__ = [
     "LLMJudge",
     "LLMJudgeWithRationale",
     "ModelParams",
+    "ModelOutputFormat",
     "ModelSpec",
     "NumericMatch",
     "OptimizationConfig",

@@ -148,6 +148,32 @@ uv run crucible export --run latest --format parquet --output ./verdicts.parquet
 uv run crucible report --run latest --format pdf
 ```
 
+## Saída Estruturada
+
+Quando o modelo deve responder em JSON seguindo um schema, use o exemplo em
+`examples/structured-output/`.
+
+OpenAI Responses API:
+
+```bash
+uv run crucible validate \
+  --prompt ./examples/structured-output/prompt.txt \
+  --gabarito ./examples/structured-output/gabarito.yaml \
+  --config ./examples/structured-output/config.openai-responses.yaml
+```
+
+Ollama:
+
+```bash
+uv run crucible validate \
+  --prompt ./examples/structured-output/prompt.txt \
+  --gabarito ./examples/structured-output/gabarito.yaml \
+  --config ./examples/structured-output/config.ollama.yaml
+```
+
+Esse exemplo usa duas camadas: `target_model.output_format` solicita o JSON Schema ao
+provider, e a assertion `json_schema` mede se a resposta cumpriu o contrato.
+
 ## Workflow Recomendado
 
 1. Escreva ou importe um gabarito.

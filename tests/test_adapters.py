@@ -1,6 +1,6 @@
 import pytest
 
-from crucible import ModelSpec
+from crucible import ModelOutputFormat, ModelSpec
 from crucible.modules.optimizer.adapters.cache import JsonlExecutionCache, execution_cache_key
 from crucible.modules.optimizer.adapters.importers import (
     import_dspy,
@@ -113,6 +113,83 @@ def test_provider_payload_and_parse_shapes():
     llamacpp = LlamaCppAdapter(_spec("llamacpp"), "http://localhost")
     assert llamacpp.path == "/completion"
     assert llamacpp.parse({"content": "ok"}).text == "ok"
+
+
+def test_provider_payloads_include_structured_output_format():
+    schema = {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"],
+        "additionalProperties": False,
+    }
+    output_format = ModelOutputFormat(
+        type="json_schema",
+        name="summary_output",
+        strict=True,
+        schema=schema,
+    )
+
+    openai_chat = OpenAIAdapter(
+        _spec("openai").model_copy(update={"output_format": output_format}),
+        "http://localhost",
+    )
+    assert openai_chat.payload("prompt", _spec().params)["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "summary_output",
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+    openai_responses = OpenAIAdapter(
+        _spec("openai").model_copy(
+            update={"api_mode": "responses", "output_format": output_format}
+        ),
+        "http://localhost",
+    )
+    responses_payload = openai_responses.payload("prompt", _spec().params)
+    assert openai_responses.path == "/v1/responses"
+    assert responses_payload["text"]["format"] == {
+        "type": "json_schema",
+        "name": "summary_output",
+        "strict": True,
+        "schema": schema,
+    }
+    assert (
+        openai_responses.parse(
+            {
+                "output": [
+                    {"content": [{"type": "output_text", "text": '{"summary":"ok"}'}]}
+                ],
+                "usage": {"input_tokens": 1, "output_tokens": 2},
+            }
+        ).text
+        == '{"summary":"ok"}'
+    )
+
+    ollama = OllamaAdapter(
+        _spec("ollama").model_copy(update={"output_format": output_format}),
+        "http://localhost",
+    )
+    assert ollama.payload("prompt", _spec().params)["format"] == schema
+
+
+def test_cache_key_includes_output_format():
+    prompt = Prompt(template="{input}", variables=["input"])
+    plain = _spec("openai")
+    structured = plain.model_copy(
+        update={
+            "output_format": ModelOutputFormat(
+                type="json_schema",
+                schema={"type": "object", "properties": {"ok": {"type": "boolean"}}},
+            )
+        }
+    )
+
+    assert execution_cache_key(prompt, "input", plain) != execution_cache_key(
+        prompt, "input", structured
+    )
 
 
 def test_importers_convert_external_formats():

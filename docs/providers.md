@@ -59,6 +59,26 @@ target_model:
 Recomendado para modelos alvo locais. Mantenha concorrência baixa quando o modelo
 usa uma única GPU.
 
+Ollama também recebe `output_format`:
+
+```yaml
+target_model:
+  provider: ollama
+  model_id: gemma3:4b
+  role: target
+  output_format:
+    type: json_schema
+    schema:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+```
+
+Para `json_object`, o adapter envia `format: json`. Para `json_schema`, envia o
+schema em `format`.
+
 ## APIs OpenAI-Compatible
 
 `openai`, `openrouter` e `vllm` usam payload no estilo chat completions.
@@ -75,6 +95,30 @@ reasoning_model:
   model_id: gpt-5
   role: reasoning
 ```
+
+Para usar a Responses API da OpenAI, configure `api_mode: responses`:
+
+```yaml
+target_model:
+  provider: openai
+  model_id: gpt-5-mini
+  role: target
+  api_mode: responses
+  output_format:
+    type: json_schema
+    name: summary_output
+    strict: true
+    schema:
+      type: object
+      additionalProperties: false
+      required: [summary]
+      properties:
+        summary:
+          type: string
+```
+
+Nesse modo, o adapter envia o schema em `text.format`. Em `api_mode:
+chat_completions`, ele envia em `response_format`.
 
 OpenRouter:
 

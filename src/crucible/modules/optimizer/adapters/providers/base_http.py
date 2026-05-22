@@ -7,7 +7,12 @@ from typing import Any
 import httpx
 
 from crucible.core.exceptions import ProviderError
-from crucible.modules.optimizer.domain.models import CompletionResult, ModelParams, ModelSpec
+from crucible.modules.optimizer.domain.models import (
+    CompletionResult,
+    ModelOutputFormat,
+    ModelParams,
+    ModelSpec,
+)
 
 
 class HttpProvider:
@@ -79,6 +84,9 @@ class HttpProvider:
         }
         if params.top_p is not None:
             data["top_p"] = params.top_p
+        output_format = _chat_response_format(self.spec.output_format)
+        if output_format is not None:
+            data["response_format"] = output_format
         data.update(params.extra)
         return data
 
@@ -94,3 +102,37 @@ class HttpProvider:
             finish_reason=choice.get("finish_reason") or "stop",
             raw=payload,
         )
+
+
+def _chat_response_format(output_format: ModelOutputFormat) -> dict[str, Any] | None:
+    if output_format.type == "text":
+        return None
+    if output_format.type == "json_object":
+        return {"type": "json_object", **output_format.provider_options}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": output_format.name,
+            "strict": output_format.strict,
+            "schema": output_format.schema_,
+            **output_format.provider_options,
+        },
+    }
+
+
+def responses_text_format(output_format: ModelOutputFormat) -> dict[str, Any] | None:
+    if output_format.type == "text":
+        return None
+    if output_format.type == "json_object":
+        return {"text": {"format": {"type": "json_object", **output_format.provider_options}}}
+    return {
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": output_format.name,
+                "strict": output_format.strict,
+                "schema": output_format.schema_,
+                **output_format.provider_options,
+            }
+        }
+    }

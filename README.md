@@ -124,6 +124,11 @@ Comece por aqui:
 - [UX e Interfaces](docs/interfaces.md)
 - [Desenvolvimento](docs/development.md)
 
+Exemplos:
+
+- [Projeto básico](examples/basic/)
+- [Saída estruturada com JSON Schema](examples/structured-output/)
+
 ## Licença
 
 Crucible é open source sob licença MIT.

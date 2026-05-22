@@ -28,13 +28,12 @@ class JsonlExecutionCache:
 
 
 def execution_cache_key(prompt: Prompt, input_text: str, model: ModelSpec) -> str:
+    model_payload = json.dumps(model.model_dump(mode="json", by_alias=True), sort_keys=True)
     payload = "|".join(
         [
             prompt.content_hash,
             input_text,
-            model.provider,
-            model.model_id,
-            model.params.content_hash,
+            sha256(model_payload.encode()).hexdigest(),
         ]
     )
     return sha256(payload.encode()).hexdigest()

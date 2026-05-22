@@ -1,6 +1,6 @@
 from crucible import Contains, Gabarito, Prompt
 from crucible import TestCase as CrucibleTestCase
-from crucible.modules.optimizer.domain.models import ExecutionResult, Verdict
+from crucible.modules.optimizer.domain.models import ExecutionResult, ModelOutputFormat, Verdict
 from crucible.modules.optimizer.domain.scoring import aggregate_score
 
 
@@ -49,6 +49,19 @@ def test_gabarito_split_creates_three_sets():
     assert val.version == "v1-val"
     assert test.version == "v1-test"
     assert len(train.cases) + len(val.cases) + len(test.cases) == 5
+
+
+def test_model_output_format_accepts_schema_alias():
+    output_format = ModelOutputFormat.model_validate(
+        {
+            "type": "json_schema",
+            "name": "summary_output",
+            "schema": {"type": "object", "properties": {"summary": {"type": "string"}}},
+        }
+    )
+
+    assert output_format.schema_["type"] == "object"
+    assert output_format.model_dump(mode="json", by_alias=True)["schema"]["type"] == "object"
 
 
 def test_aggregate_score_uses_weights_and_tags():

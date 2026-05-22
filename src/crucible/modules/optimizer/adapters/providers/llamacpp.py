@@ -17,6 +17,13 @@ class LlamaCppAdapter(HttpProvider):
             "temperature": params.temperature,
             "n_predict": params.max_tokens,
         }
+        if self.spec.output_format.type == "json_object":
+            data["response_format"] = {"type": "json_object"}
+        elif self.spec.output_format.type == "json_schema":
+            data["response_format"] = {
+                "type": "json_schema",
+                "schema": self.spec.output_format.schema_,
+            }
         data.update(params.extra)
         return data
 

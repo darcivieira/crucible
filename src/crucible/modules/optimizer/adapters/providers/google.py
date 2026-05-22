@@ -16,13 +16,17 @@ class GoogleAdapter(HttpProvider):
         return {"x-goog-api-key": self.api_key} if self.api_key else {}
 
     def payload(self, prompt: str, params: ModelParams) -> dict[str, Any]:
-        data = {
+        data: dict[str, Any] = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": params.temperature,
                 "maxOutputTokens": params.max_tokens,
             },
         }
+        if self.spec.output_format.type in {"json_object", "json_schema"}:
+            data["generationConfig"]["responseMimeType"] = "application/json"
+        if self.spec.output_format.type == "json_schema":
+            data["generationConfig"]["responseSchema"] = self.spec.output_format.schema_
         data.update(params.extra)
         return data
 

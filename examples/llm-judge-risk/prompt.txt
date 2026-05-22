@@ -1,0 +1,5 @@
+Avalie o risco operacional descrito no texto. Responda com uma classificacao
+curta e uma justificativa baseada apenas no input.
+
+Texto:
+{input}

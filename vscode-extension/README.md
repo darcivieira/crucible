@@ -7,6 +7,8 @@ Scaffold inicial da extensão VSCode do Crucible.
 - `Crucible: Validate Prompt`
 - `Crucible: Optimize Prompt`
 - `Crucible: Open Dashboard`
+- `Crucible: Open Latest HTML Report`
+- `Crucible: Select Prompt, Gabarito and Config`
 
 ## Configurações
 
@@ -20,6 +22,7 @@ Scaffold inicial da extensão VSCode do Crucible.
 ```bash
 npm install
 npm run compile
+npm run package
 ```
 
 Abra esta pasta no VSCode e execute a extensão em modo debug.

@@ -17,6 +17,7 @@ wheels/
 .idea/
 vscode-extension/node_modules/
 vscode-extension/out/
+vscode-extension/*.vsix
 
 # Crucible local artifacts
 .crucible/

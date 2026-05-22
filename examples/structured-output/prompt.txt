@@ -1,0 +1,4 @@
+Analise o texto abaixo e retorne apenas JSON válido no formato solicitado pelo schema.
+
+Texto:
+{input}

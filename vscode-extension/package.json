@@ -5,6 +5,11 @@
   "version": "0.1.0",
   "publisher": "crucible",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/darcijunior/crucible.git",
+    "directory": "vscode-extension"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -12,9 +17,17 @@
   "activationEvents": [
     "onCommand:crucible.validate",
     "onCommand:crucible.optimize",
-    "onCommand:crucible.serve"
+    "onCommand:crucible.openDashboard",
+    "onCommand:crucible.openLatestReport",
+    "onCommand:crucible.selectFiles"
   ],
   "main": "./out/extension.js",
+  "files": [
+    "out",
+    "README.md",
+    "package.json",
+    "LICENSE"
+  ],
   "contributes": {
     "commands": [
       {
@@ -26,8 +39,16 @@
         "title": "Crucible: Optimize Prompt"
       },
       {
-        "command": "crucible.serve",
+        "command": "crucible.openDashboard",
         "title": "Crucible: Open Dashboard"
+      },
+      {
+        "command": "crucible.openLatestReport",
+        "title": "Crucible: Open Latest HTML Report"
+      },
+      {
+        "command": "crucible.selectFiles",
+        "title": "Crucible: Select Prompt, Gabarito and Config"
       }
     ],
     "configuration": {
@@ -58,11 +79,16 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "npm run compile && vsce package --no-dependencies",
+    "publish:vsce": "vsce publish --pat \"$VSCE_PAT\"",
+    "publish:ovsx": "ovsx publish --pat \"$OVSX_PAT\""
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.2",
+    "ovsx": "^0.10.4",
     "typescript": "^5.7.0"
   }
 }

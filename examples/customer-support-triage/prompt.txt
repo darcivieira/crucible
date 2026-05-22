@@ -1,0 +1,11 @@
+Classifique a mensagem de suporte em uma das categorias abaixo e responda apenas com
+a categoria:
+
+- billing
+- technical
+- account
+- cancellation
+- other
+
+Mensagem:
+{input}

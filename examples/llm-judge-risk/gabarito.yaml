@@ -1,0 +1,24 @@
+name: llm-judge-risk
+version: v1
+description: Exemplo de avaliacao subjetiva usando LLM-as-judge.
+cases:
+  - id: risk-001
+    input: "Fornecedor critico atrasou tres entregas consecutivas e nao apresentou plano de recuperacao."
+    expected_output: "Alto risco por recorrencia de atraso e ausencia de plano de mitigacao."
+    assertion:
+      type: llm_judge
+      rubric: >
+        A resposta deve identificar risco alto, citar recorrencia de atrasos e mencionar
+        ausencia de plano de mitigacao. Nao deve inventar informacoes.
+      pass_threshold: 0.75
+    tags: [risk, supplier]
+  - id: risk-002
+    input: "Cliente pediu segunda via de boleto antes do vencimento."
+    expected_output: "Baixo risco; trata-se de solicitacao operacional comum."
+    assertion:
+      type: llm_judge
+      rubric: >
+        A resposta deve classificar como baixo risco e justificar que a solicitacao e
+        operacional comum.
+      pass_threshold: 0.75
+    tags: [risk, billing]

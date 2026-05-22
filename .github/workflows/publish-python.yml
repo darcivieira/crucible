@@ -1,0 +1,33 @@
+name: Publish Python Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync
+      - name: Run checks
+        run: |
+          uv run ruff check .
+          uv run mypy src
+          uv run pytest
+      - name: Build distribution
+        run: uv build
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

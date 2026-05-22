@@ -1,5 +1,10 @@
 # Crucible
 
+[![CI](https://github.com/darcijunior/crucible/actions/workflows/ci.yml/badge.svg)](https://github.com/darcijunior/crucible/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/crucible.svg)](https://pypi.org/project/crucible/)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Crucible é um framework pragmático para otimização empírica de prompts. Ele executa
 um prompt contra um gabarito versionado, mede qualidade/custo/latência, usa um modelo
 de raciocínio para diagnosticar falhas, refina o prompt e mantém o melhor prompt
@@ -106,6 +111,7 @@ Comece por aqui:
 
 - [Índice da documentação](docs/index.md)
 - [Quickstart](docs/quickstart.md)
+- [Tutorial end-to-end](docs/tutorials/customer-support-end-to-end.md)
 - [Conceitos](docs/concepts.md)
 - [Referência CLI](docs/cli.md)
 - [Configuração](docs/configuration.md)
@@ -123,10 +129,15 @@ Comece por aqui:
 - [Decisões Técnicas](docs/technical-decisions.md)
 - [UX e Interfaces](docs/interfaces.md)
 - [Desenvolvimento](docs/development.md)
+- [Contribuição](CONTRIBUTING.md)
+- [Segurança](SECURITY.md)
 
 Exemplos:
 
 - [Projeto básico](examples/basic/)
+- [Triagem de suporte](examples/customer-support-triage/)
+- [LLM-as-judge para risco](examples/llm-judge-risk/)
+- [Train/val/test](examples/train-val-test/)
 - [Saída estruturada com JSON Schema](examples/structured-output/)
 
 ## Licença

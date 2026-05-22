@@ -9,9 +9,22 @@ Use este índice conforme o que você precisa fazer.
 
 - [Quickstart](quickstart.md): crie um projeto, rode uma otimização e inspecione os
   resultados.
+- [Tutorial end-to-end](tutorials/customer-support-end-to-end.md): fluxo completo de
+  triagem de suporte, report e exports.
 - [Conceitos](concepts.md): entenda prompt, gabarito, test case, assertion e run.
 - [Referência CLI](cli.md): comandos e flags disponíveis.
 - [Configuração](configuration.md): referência completa do `config.yaml`.
+
+## Guias Por Cenário
+
+- [Prompt simples](guides/simple-prompt.md): avaliação e otimização de texto livre.
+- [Saída JSON estruturada](guides/structured-json.md): `output_format` mais
+  assertions estruturais.
+- [LLM-as-judge](guides/llm-as-judge.md): avaliação subjetiva com rubrica.
+- [Train/val/test](guides/train-val-test.md): reduzir overfitting ao gabarito.
+- [Uso em CI](guides/ci.md): validação de regressões em pull requests.
+- [Uso via SDK](guides/sdk.md): integração Python programática.
+- [Plugins](guides/plugins.md): assertions e importadores de domínio.
 
 ## Autores De Avaliação
 
@@ -56,3 +69,12 @@ Use este índice conforme o que você precisa fazer.
 
 - [Projeto básico local](../examples/basic/)
 - [Saída estruturada com JSON Schema](../examples/structured-output/)
+- [Triagem de suporte](../examples/customer-support-triage/)
+- [LLM-as-judge para risco](../examples/llm-judge-risk/)
+- [Train/val/test](../examples/train-val-test/)
+
+## Comunidade
+
+- [Contributing](../CONTRIBUTING.md)
+- [Code of Conduct](../CODE_OF_CONDUCT.md)
+- [Security](../SECURITY.md)

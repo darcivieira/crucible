@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+    tags-ignore: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Mypy
+        run: uv run mypy src
+      - name: Tests
+        run: uv run pytest
+      - name: Validate examples
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          import yaml
+          from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt
+
+          for path in sorted(Path("examples").glob("**/*.yaml")):
+              data = yaml.safe_load(path.read_text())
+              if path.name.startswith("config"):
+                  OptimizationConfig.model_validate(data)
+              elif path.name == "gabarito.yaml":
+                  Gabarito.model_validate(data)
+          for path in sorted(Path("examples").glob("**/prompt.txt")):
+              Prompt.from_file(path)
+          print("examples validate")
+          PY
+      - name: Build package
+        run: uv build
+      - name: Upload Python dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  vscode:
+    name: VSCode extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Compile
+        run: npm run compile
+      - name: Package VSIX
+        run: npm run package
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix

@@ -1,0 +1,36 @@
+threshold: 95.0
+max_iterations: 3
+max_cost_usd: 5.0
+max_wallclock_seconds: 1800
+parallelism: 2
+
+target_model:
+  provider: openai
+  model_id: gpt-5-mini
+  role: target
+  api_mode: responses
+  params:
+    temperature: 0.0
+    max_tokens: 512
+  output_format:
+    type: json_schema
+    name: summary_output
+    strict: true
+    schema:
+      type: object
+      additionalProperties: false
+      required: [summary, risk]
+      properties:
+        summary:
+          type: string
+        risk:
+          type: string
+          enum: [low, medium, high]
+
+reasoning_model:
+  provider: openai
+  model_id: gpt-5
+  role: reasoning
+  params:
+    temperature: 0.0
+    max_tokens: 2048

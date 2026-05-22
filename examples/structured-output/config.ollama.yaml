@@ -1,0 +1,37 @@
+threshold: 95.0
+max_iterations: 3
+max_cost_usd: 5.0
+max_wallclock_seconds: 1800
+parallelism: 1
+
+target_model:
+  provider: ollama
+  model_id: gemma3:4b
+  role: target
+  params:
+    temperature: 0.0
+    max_tokens: 512
+  rate_limit:
+    max_concurrent: 1
+  output_format:
+    type: json_schema
+    name: summary_output
+    strict: true
+    schema:
+      type: object
+      additionalProperties: false
+      required: [summary, risk]
+      properties:
+        summary:
+          type: string
+        risk:
+          type: string
+          enum: [low, medium, high]
+
+reasoning_model:
+  provider: openai
+  model_id: gpt-5
+  role: reasoning
+  params:
+    temperature: 0.0
+    max_tokens: 2048

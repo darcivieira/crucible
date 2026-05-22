@@ -1,0 +1,4 @@
+Responda ao input abaixo seguindo exatamente a instrucao.
+
+Input:
+{input}

@@ -1,0 +1,68 @@
+{
+  "name": "crucible-vscode",
+  "displayName": "Crucible",
+  "description": "Run Crucible prompt validation and optimization from VSCode.",
+  "version": "0.1.0",
+  "publisher": "crucible",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:crucible.validate",
+    "onCommand:crucible.optimize",
+    "onCommand:crucible.serve"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "crucible.validate",
+        "title": "Crucible: Validate Prompt"
+      },
+      {
+        "command": "crucible.optimize",
+        "title": "Crucible: Optimize Prompt"
+      },
+      {
+        "command": "crucible.serve",
+        "title": "Crucible: Open Dashboard"
+      }
+    ],
+    "configuration": {
+      "title": "Crucible",
+      "properties": {
+        "crucible.command": {
+          "type": "string",
+          "default": "uv run crucible",
+          "description": "Command prefix used to run Crucible."
+        },
+        "crucible.configPath": {
+          "type": "string",
+          "default": "config.yaml",
+          "description": "Path to Crucible config relative to the workspace root."
+        },
+        "crucible.promptPath": {
+          "type": "string",
+          "default": "prompt.txt",
+          "description": "Path to prompt file relative to the workspace root."
+        },
+        "crucible.gabaritoPath": {
+          "type": "string",
+          "default": "gabarito.yaml",
+          "description": "Path to gabarito file relative to the workspace root."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,33 @@
+from crucible.modules.optimizer.domain.models import (
+    CompletionResult,
+    CostEstimate,
+    ExecutionResult,
+    Gabarito,
+    Iteration,
+    ModelParams,
+    ModelSpec,
+    OptimizationConfig,
+    OptimizationRun,
+    Prompt,
+    ProviderRateLimit,
+    ScoreReport,
+    TestCase,
+    Verdict,
+)
+
+__all__ = [
+    "CompletionResult",
+    "CostEstimate",
+    "ExecutionResult",
+    "Gabarito",
+    "Iteration",
+    "ModelParams",
+    "ModelSpec",
+    "OptimizationConfig",
+    "OptimizationRun",
+    "Prompt",
+    "ProviderRateLimit",
+    "ScoreReport",
+    "TestCase",
+    "Verdict",
+]

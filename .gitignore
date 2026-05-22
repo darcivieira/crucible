@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv
+
+# Editors
+.idea/
+vscode-extension/node_modules/
+vscode-extension/out/
+
+# Crucible local artifacts
+.crucible/
+.crucible-quickstart-*/
+
+.env
+.idea

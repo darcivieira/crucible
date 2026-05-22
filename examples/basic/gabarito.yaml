@@ -1,0 +1,25 @@
+name: basic-smoke
+version: v1
+description: Minimal gabarito for checking a prompt against deterministic assertions.
+cases:
+  - id: case-001
+    input: "Diga apenas: ok"
+    expected_output: "ok"
+    assertion:
+      type: contains
+    weight: 1.0
+    tags: [smoke]
+  - id: case-002
+    input: "Retorne o numero 42"
+    expected_output: "42"
+    assertion:
+      type: contains
+    weight: 1.0
+    tags: [numeric]
+  - id: case-003
+    input: "Responda com JSON: {\"status\": \"ok\"}"
+    expected_output: '{"type":"object","required":["status"]}'
+    assertion:
+      type: json_schema
+    weight: 1.0
+    tags: [json]

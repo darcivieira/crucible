@@ -22,7 +22,15 @@ Arquivos criados:
 
 ## `validate`
 
-Executa um prompt contra o gabarito sem refinamento.
+Executa o prompt atual contra o gabarito sem refinamento.
+
+Use `validate` quando você quer responder:
+
+- meu `prompt.txt` renderiza corretamente?
+- meu `gabarito.yaml` está bem formado?
+- as assertions estão avaliando o que eu espero?
+- o `target_model` está acessível?
+- qual score o prompt atual faz antes de otimizar?
 
 ```bash
 uv run crucible validate \
@@ -31,11 +39,24 @@ uv run crucible validate \
   --config config.yaml
 ```
 
-Use antes de `optimize` para validar provider, prompt e gabarito.
+O comando roda uma única iteração, equivalente à `v0` de uma otimização. Ele:
+
+1. renderiza o prompt para cada caso;
+2. chama o `target_model`;
+3. aplica a assertion do caso;
+4. calcula score, pass rate, custo, tokens e latência;
+5. imprime uma tabela no terminal.
+
+Ele não chama o `reasoning_model` para criar um novo prompt. Por isso é o comando
+certo para depurar setup antes de gastar com `optimize`.
 
 ## `optimize`
 
 Executa o loop completo de otimização.
+
+Use `optimize` quando o setup já foi validado e você quer que o Crucible tente
+melhorar o prompt automaticamente. Diferente de `validate`, esse comando usa o
+`reasoning_model` para diagnosticar falhas e propor novas versões do prompt.
 
 ```bash
 uv run crucible optimize --config config.yaml
@@ -51,6 +72,29 @@ uv run crucible optimize \
   --prompt prompt_v0.txt \
   --gabarito regression.yaml
 ```
+
+O comando:
+
+1. executa o prompt inicial;
+2. calcula score e métricas operacionais;
+3. seleciona falhas relevantes;
+4. pede um diagnóstico ao `reasoning_model`;
+5. pede uma proposta de novo prompt;
+6. executa a nova versão contra o gabarito;
+7. repete até algum critério de parada.
+
+Critérios de parada:
+
+- `threshold_reached`: melhor score atingiu o threshold;
+- `max_iterations`: limite de iterações;
+- `budget_exhausted`: custo máximo atingido;
+- `time_exhausted`: tempo máximo atingido;
+- `plateau`: score parou de melhorar;
+- `no_failures`: não há falhas para refinar;
+- `cancelled`: task cancelada pela API.
+
+Ao terminar, a run fica salva em `.crucible/` e o melhor prompt pode ser visto com
+`show-run`, `report`, `diff`, `export` ou pelo dashboard.
 
 ## `estimate-cost`
 

@@ -45,6 +45,12 @@ my-prompt/
   config.yaml
 ```
 
+Esses três arquivos são o núcleo do Crucible:
+
+- `prompt.txt`: o prompt que será avaliado e depois otimizado.
+- `gabarito.yaml`: os casos de teste que dizem o que é uma resposta boa.
+- `config.yaml`: modelos, budget, paralelismo e critérios de parada.
+
 ## Configurar Modelos
 
 Edite `./my-prompt/config.yaml`:
@@ -70,6 +76,10 @@ uv run crucible validate \
   --config ./my-prompt/config.yaml
 ```
 
+`validate` é o check de sanidade do projeto. Ele executa o prompt atual contra o
+gabarito e mostra score, pass rate, custo e latência. Se esse comando falhar, corrija
+provider, prompt, gabarito ou assertion antes de rodar `optimize`.
+
 ## Estimar Custo
 
 ```bash
@@ -85,6 +95,10 @@ declarados em cada `ModelSpec`.
 uv run crucible optimize --config ./my-prompt/config.yaml
 ```
 
+`optimize` é a etapa em que o Crucible passa de avaliação para melhoria automática.
+Ele usa o `reasoning_model` para olhar os casos que falharam, identificar padrões de
+erro e propor uma nova versão do prompt.
+
 O Crucible irá:
 
 1. Executar o prompt inicial.
@@ -94,6 +108,9 @@ O Crucible irá:
 5. Repetir até atingir threshold, budget, tempo, plateau ou máximo de iterações.
 
 O resultado final aponta sempre para o melhor prompt visto durante a run.
+
+Isso importa porque uma iteração posterior pode piorar. O histórico fica guardado,
+mas o "best prompt" continua sendo a melhor versão encontrada.
 
 ## Inspecionar Resultados
 
@@ -105,6 +122,10 @@ uv run crucible diff --run latest --from 0 --to best
 ```
 
 Relatórios são escritos em `.crucible/reports/`.
+
+Use `diff` para entender o que mudou entre o prompt inicial e o melhor prompt. Use
+`report` ou o dashboard para ver quais casos continuaram falhando e quais viraram
+regressão.
 
 ## Abrir Dashboard
 

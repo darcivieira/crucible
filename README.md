@@ -26,9 +26,14 @@ interfaces locais opcionais sobre os mesmos dados.
 
 ## Quickstart
 
+O fluxo normal não começa otimizando. Primeiro você valida se o prompt, o gabarito e
+os providers estão funcionando; depois estima custo; só então roda a otimização.
+
 ```bash
 uv sync
 uv run crucible init ./my-prompt
+uv run crucible validate --prompt ./my-prompt/prompt.txt --gabarito ./my-prompt/gabarito.yaml --config ./my-prompt/config.yaml
+uv run crucible estimate-cost --config ./my-prompt/config.yaml
 uv run crucible optimize --config ./my-prompt/config.yaml
 uv run crucible serve
 ```
@@ -38,6 +43,20 @@ Abra `http://127.0.0.1:7777` para inspecionar o histórico local.
 O template criado pelo `init` usa Ollama como modelo alvo e OpenAI como modelo de
 raciocínio. Ajuste `config.yaml` antes de rodar se esses providers não estiverem
 disponíveis.
+
+## Como Pensar No Fluxo
+
+`validate` responde: "o prompt atual passa no meu gabarito?".
+
+Ele executa apenas a versão atual do prompt, calcula score e mostra se o setup está
+correto. Use para depurar gabarito, provider, assertion e formato de saída.
+
+`optimize` responde: "o Crucible consegue melhorar este prompt?".
+
+Ele executa o prompt, encontra falhas, pede ao `reasoning_model` um diagnóstico,
+gera uma nova versão do prompt e repete até bater threshold, budget ou outro critério
+de parada. A run sempre preserva o melhor prompt encontrado, não necessariamente o
+último.
 
 ## Uso Mínimo Via SDK
 

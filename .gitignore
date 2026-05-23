@@ -25,3 +25,4 @@ vscode-extension/*.vsix
 
 .env
 .idea
+.publicacao

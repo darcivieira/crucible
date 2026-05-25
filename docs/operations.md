@@ -129,9 +129,24 @@ Scores instáveis:
 - reduza temperatura;
 - configure seed quando suportado.
 
+Score alto com muitos casos falhando:
+
+- verifique se há assertions com score parcial, como `field_by_field`;
+- compare `global_score` com `pass_rate`;
+- se uma chave crítica domina a decisão, documente isso com `field_by_field.weights`;
+- lembre que pesos por campo afetam o score do caso, mas não criam threshold separado
+  por chave no `config.yaml`.
+
 Overfitting:
 
 - habilite `use_gabarito_split`;
 - inspecione `validation_scores`;
 - adicione casos mais diversos;
 - não copie exemplos de teste para o prompt.
+
+Se `validation_scores.train` ficar muito acima de `validation_scores.val`, o prompt
+provavelmente está especializado nos casos usados para refino. Se `val` e `test`
+ficarem próximos, há sinal melhor de generalização.
+
+Como o split atual é determinístico por `case.id`, revise a distribuição dos casos.
+IDs agrupados por classe, data ou fonte podem gerar train/val/test enviesados.

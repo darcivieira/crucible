@@ -11,6 +11,23 @@ def test_prompt_hash_and_render():
     assert len(prompt.content_hash) == 12
 
 
+def test_prompt_render_preserves_literal_json_braces():
+    prompt = Prompt(
+        template='Retorne {"classification": "Nenhum", "text_validation": ""}\nInput: {input}',
+        variables=["input"],
+    )
+
+    assert prompt.render(input_text="texto") == (
+        'Retorne {"classification": "Nenhum", "text_validation": ""}\nInput: texto'
+    )
+
+
+def test_prompt_render_treats_input_as_literal_replacement():
+    prompt = Prompt(template="Input: {input}", variables=["input"])
+
+    assert prompt.render(input_text=r"texto com \98 e \1") == r"Input: texto com \98 e \1"
+
+
 def test_gabarito_requires_cases():
     gabarito = Gabarito(
         name="sample",

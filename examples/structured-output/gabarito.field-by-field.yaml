@@ -8,5 +8,8 @@ cases:
       {"summary": "pagamento em atraso com promessa de quitacao em 7 dias", "risk": "medium"}
     assertion:
       type: field_by_field
+      weights:
+        risk: 95
+        summary: 5
     weight: 1.0
     tags: [structured-output, field-by-field]

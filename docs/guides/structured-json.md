@@ -60,6 +60,41 @@ assertion:
 
 Esse formato compara os campos do payload retornado com os campos esperados.
 
+Quando uma chave é mais importante que outra, use pesos:
+
+```yaml
+expected_output: |
+  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+assertion:
+  type: field_by_field
+  weights:
+    classification: 95
+    text_validation: 5
+```
+
+Aqui, `classification` domina o score do caso. Isso ajuda quando o produto precisa
+priorizar a classe extraída e tratar texto auxiliar como sinal secundário.
+
+O threshold continua global:
+
+```yaml
+threshold: 95.0
+```
+
+Esse valor não significa "classification precisa bater 95%". Ele significa "a run
+para quando o score global chegar a 95". O peso `classification: 95` faz essa chave
+representar 95% do score de cada caso onde ela aparece.
+
+Exemplo de leitura:
+
+- `classification` correta e `text_validation` errada: score do caso `0.95`;
+- `classification` errada e `text_validation` correta: score do caso `0.05`;
+- ambos corretos: score do caso `1.0`.
+
+Mesmo com score parcial alto, o caso só fica com `passed=true` quando todos os campos
+esperados batem. Use o `global_score` para ver progresso ponderado e o `pass_rate`
+para ver quantos casos ficaram totalmente corretos.
+
 ### Gabarito Gerado Com `json_schema`
 
 Quando um gabarito é gerado automaticamente e vem com `assertion.type: json_schema`,
@@ -77,6 +112,10 @@ assertion:
 Mesmo que um modelo menor retorne uma string com JSON dentro, o Crucible faz parse
 dos dois lados antes de comparar. Ainda assim, prefira escrever o gabarito como JSON
 válido, com aspas duplas.
+
+Esse modo de compatibilidade compara campos com peso uniforme. Se uma chave precisa
+valer mais que outra, troque a assertion do caso para `field_by_field` e declare
+`weights`.
 
 ## Comando
 

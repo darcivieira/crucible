@@ -82,6 +82,49 @@ embedding_model: null
 | `selection_strategy` | `quality` ou `multi_objective`. |
 | `active_learning_suggestions` | Quantidade de sugestões de novos casos ao final da run. |
 
+## Threshold Global E Métricas Por Campo
+
+`threshold` é aplicado ao score global da run:
+
+```yaml
+threshold: 95.0
+```
+
+Ele não configura, hoje, thresholds separados por chave de JSON. Para respostas
+estruturadas em que uma chave é mais importante que outra, configure pesos na
+assertion do gabarito:
+
+```yaml
+expected_output: |
+  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+assertion:
+  type: field_by_field
+  weights:
+    classification: 95
+    text_validation: 5
+```
+
+Assim, o campo `classification` representa 95% do score daquele caso. O score global
+continua sendo a média ponderada dos casos.
+
+Não coloque pesos de chave em `config.yaml`; eles pertencem ao gabarito porque fazem
+parte da regra de avaliação de cada caso. O `config.yaml` controla a run, providers,
+budgets e critérios globais de parada. O gabarito controla o que é considerado certo
+ou errado.
+
+Também não existe, nesta versão, uma configuração como:
+
+```yaml
+# Nao implementado
+field_metrics:
+  classification:
+    threshold: 95.0
+```
+
+Para evidenciar uma chave crítica hoje, use `field_by_field.weights`, tags de domínio
+nos casos e análise dos verdicts/exportações quando precisar de uma métrica agregada
+por chave.
+
 ## Train/Val/Test
 
 ```yaml
@@ -96,7 +139,22 @@ Quando habilitado:
 - o melhor prompt é validado em val e test;
 - os scores são guardados em `run.validation_scores`.
 
-Use isso quando houver risco de overfitting no gabarito.
+Use isso quando houver risco de overfitting no gabarito. O split é feito em memória
+durante o `optimize`; não é necessário criar arquivos separados.
+
+O comportamento atual é determinístico:
+
+1. ordena os casos por `case.id`;
+2. separa `train_ratio` para treino;
+3. separa `val_ratio` para validação;
+4. usa o restante como test.
+
+Com `train_ratio: 0.7` e `val_ratio: 0.15`, um gabarito de 1000 casos fica com 700
+casos de train, 150 de val e 150 de test.
+
+Essa divisão é reprodutível, mas pode ser enviesada se os IDs agruparem exemplos por
+tipo. Se o gabarito estiver ordenado por classe, origem ou data, intercale os casos
+antes de usar split.
 
 ## Backend De Execução
 
@@ -247,7 +305,7 @@ assertion:
 Nesse fluxo, `expected_output` e output real são parseados, ambos são validados contra
 o schema do config e depois comparados campo a campo. Isso é útil para gabaritos
 gerados automaticamente. Para gabaritos escritos manualmente, `field_by_field` deixa
-a intenção mais clara.
+a intenção mais clara e permite pesos por campo.
 
 Veja exemplos completos em `examples/structured-output/`.
 

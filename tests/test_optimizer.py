@@ -139,6 +139,73 @@ async def test_optimize_returns_best_seen_prompt_after_refinement():
 
 
 @pytest.mark.asyncio
+async def test_optimize_normalizes_reasoning_confidence_scales():
+    calls = {"target": 0, "reasoning": 0}
+
+    def target_response(prompt):
+        calls["target"] += 1
+        return "wrong" if calls["target"] == 1 else "ok"
+
+    def reasoning_response(prompt):
+        calls["reasoning"] += 1
+        if calls["reasoning"] == 1:
+            return json.dumps(
+                {
+                    "pattern": "missing exact instruction",
+                    "hypothesis": "prompt is vague",
+                    "category": "INSTRUCTION_AMBIGUITY",
+                    "confidence": 5.0,
+                    "is_model_limitation": False,
+                }
+            )
+        return json.dumps(
+            {
+                "new_prompt": "Responda exatamente ok para: {input}",
+                "diff_summary": "adds exact output",
+                "rationale": "forces expected answer",
+                "expected_improvement": "higher precision",
+                "confidence": 80,
+            }
+        )
+
+    optimizer = Optimizer(
+        _config(max_iterations=3, threshold=100),
+        target_provider=FakeProvider(target_response),
+        reasoning_provider=FakeProvider(reasoning_response),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+
+    assert run.iterations[1].diagnosis is not None
+    assert run.iterations[1].diagnosis.confidence == 0.5
+    assert run.iterations[1].refinement_rationale == "forces expected answer"
+
+
+@pytest.mark.asyncio
+async def test_optimize_keeps_current_prompt_when_reasoning_returns_invalid_json():
+    optimizer = Optimizer(
+        _config(max_iterations=2, threshold=100),
+        target_provider=FakeProvider(lambda prompt: "wrong"),
+        reasoning_provider=FakeProvider(lambda prompt: ""),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+
+    assert run.stop_reason == "max_iterations"
+    assert len(run.iterations) == 2
+    assert run.iterations[1].diagnosis is not None
+    assert run.iterations[1].diff_summary == "reasoning model returned invalid JSON"
+    assert run.best_iteration is not None
+    assert run.best_iteration.prompt.template == "{input}"
+
+
+@pytest.mark.asyncio
 async def test_optimize_stops_at_max_iterations():
     optimizer = Optimizer(
         _config(max_iterations=1, threshold=100),

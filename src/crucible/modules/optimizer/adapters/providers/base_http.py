@@ -64,7 +64,7 @@ class HttpProvider:
                         raise
                     await asyncio.sleep(self.spec.rate_limit.retry_backoff_seconds * (2**attempt))
         except httpx.HTTPError as exc:
-            raise ProviderError(f"{self.spec.provider} provider request failed: {exc}") from exc
+            raise ProviderError(_provider_error_message(self.spec.provider, exc)) from exc
         if last_error is not None and "payload" not in locals():
             raise ProviderError(f"{self.spec.provider} provider request failed: {last_error}")
         result = self.parse(payload)
@@ -118,6 +118,15 @@ def _chat_response_format(output_format: ModelOutputFormat) -> dict[str, Any] | 
             **output_format.provider_options,
         },
     }
+
+
+def _provider_error_message(provider: str, exc: httpx.HTTPError) -> str:
+    message = f"{provider} provider request failed: {exc}"
+    if isinstance(exc, httpx.HTTPStatusError):
+        body = exc.response.text.strip()
+        if body:
+            message = f"{message}; response_body={body[:2000]}"
+    return message
 
 
 def responses_text_format(output_format: ModelOutputFormat) -> dict[str, Any] | None:

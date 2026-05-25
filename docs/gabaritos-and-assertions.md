@@ -179,6 +179,46 @@ assertion:
 Compara campos de objetos JSON e retorna score parcial.
 É a opção mais prática quando o modelo retorna uma string contendo JSON e o gabarito
 descreve os campos esperados, como classificação, status, risco ou justificativa.
+O Crucible faz parse dos dois lados antes de comparar, então funciona mesmo quando
+o provider devolve uma string contendo JSON em vez de um objeto já materializado.
+
+#### Pesos Por Campo
+
+Use `weights` quando nem todas as chaves têm a mesma importância. Em extrações
+estruturadas, é comum a classe/label ser mais importante que um texto auxiliar:
+
+```yaml
+expected_output: |
+  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+assertion:
+  type: field_by_field
+  weights:
+    classification: 95
+    text_validation: 5
+```
+
+Os pesos são proporcionais. O exemplo acima é equivalente a `0.95` e `0.05`. Se o
+modelo acertar `classification` e errar `text_validation`, o caso recebe score `0.95`.
+Se errar `classification` e acertar `text_validation`, recebe `0.05`.
+
+Campos não listados em `weights` recebem peso `1.0`. Use pesos positivos e evite
+configurações ambíguas como todos os campos com peso `0`. O campo só é considerado
+correto quando o valor parseado é igual ao valor esperado; se o campo estiver ausente
+no output real, ele conta como erro.
+
+O `passed` do caso continua sendo estrito: em `field_by_field`, uma resposta parcial
+normalmente recebe score parcial, mas só passa quando todos os campos esperados batem.
+Por isso é possível ter `global_score` subindo enquanto o `pass_rate` segue baixo.
+
+Isso muda o score do caso, não cria uma métrica global separada por chave. Hoje o
+threshold global do `config.yaml` continua avaliando o score agregado da run. Para
+destacar o desempenho por campo nos reports, use tags complementares ou exporte os
+verdicts para análise externa.
+
+Se você precisa que `classification` represente 95% da decisão, prefira
+`field_by_field.weights`. A exceção pragmática de `json_schema` com payload esperado
+usa comparação campo a campo sem pesos; ela existe para gabaritos gerados
+automaticamente, não para expressar prioridade entre chaves.
 
 ### `pydantic_model`
 

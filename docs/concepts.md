@@ -41,6 +41,9 @@ Um caso individual com:
 - `weight`: peso no score global.
 - `tags`: agrupadores para breakdown de score.
 
+`weight` é peso do caso inteiro. Para pesar chaves dentro de um JSON estruturado,
+use `assertion.weights` em `field_by_field`, não `weight`.
+
 Quando o output do modelo é estruturado, `expected_output` pode ser o payload esperado:
 
 ```yaml
@@ -53,6 +56,18 @@ assertion:
 Se o `config.yaml` declara `target_model.output_format.type: json_schema`, o Crucible
 usa o schema do config para validar expected/actual e compara os campos parseados.
 Isso permite usar gabaritos gerados automaticamente sem reescrever cada assertion.
+
+Quando alguma chave é mais importante que outra, escreva a assertion explicitamente:
+
+```yaml
+expected_output: |
+  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+assertion:
+  type: field_by_field
+  weights:
+    classification: 95
+    text_validation: 5
+```
 
 ## Assertion
 
@@ -87,6 +102,10 @@ Agregado que guarda uma execução completa:
 - melhor iteração;
 - motivo de parada;
 - scores de validação quando split está habilitado.
+
+Quando `use_gabarito_split` está habilitado, a run otimiza usando apenas o split de
+treino. Depois que escolhe o melhor prompt, valida esse prompt nos splits de `val` e
+`test` e grava os resultados em `validation_scores`.
 
 ## Iteration
 

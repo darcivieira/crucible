@@ -173,7 +173,7 @@ uv run crucible export --run latest --format pdf --output ./report.pdf
 
 ## `split-gabarito`
 
-Cria arquivos determinísticos de train/val/test.
+Cria arquivos determinísticos de train/val/test para inspeção ou execução manual.
 
 ```bash
 uv run crucible split-gabarito \
@@ -182,6 +182,14 @@ uv run crucible split-gabarito \
   --train 0.7 \
   --val 0.15
 ```
+
+Esse comando materializa a mesma regra usada por `use_gabarito_split: true`: os casos
+são ordenados por `case.id`, depois cortados em train, val e test. Com 1000 casos,
+`--train 0.7 --val 0.15` gera 700/150/150.
+
+Use o comando quando quiser revisar a divisão, versionar splits explícitos ou rodar
+validações separadas em CI. Para o fluxo normal de `optimize`, basta habilitar
+`use_gabarito_split` no config.
 
 ## `import-gabarito`
 

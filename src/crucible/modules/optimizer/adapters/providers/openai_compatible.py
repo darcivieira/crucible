@@ -16,7 +16,10 @@ class OpenAIAdapter(HttpProvider):
 
     def payload(self, prompt: str, params: ModelParams) -> dict[str, Any]:
         if self.spec.api_mode != "responses":
-            return super().payload(prompt, params)
+            chat_payload = super().payload(prompt, params)
+            if _uses_max_completion_tokens(self.spec.model_id):
+                chat_payload["max_completion_tokens"] = chat_payload.pop("max_tokens")
+            return chat_payload
         data: dict[str, Any] = {
             "model": self.spec.model_id,
             "input": prompt,
@@ -60,3 +63,8 @@ def _responses_output_text(payload: dict[str, Any]) -> str:
             if content.get("type") in {"output_text", "text"}:
                 chunks.append(str(content.get("text", "")))
     return "".join(chunks)
+
+
+def _uses_max_completion_tokens(model_id: str) -> bool:
+    normalized = model_id.lower()
+    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))

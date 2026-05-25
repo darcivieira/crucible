@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -39,6 +41,13 @@ StopReason = Literal[
 ]
 
 
+def _literal_replacement(value: str) -> Callable[[re.Match[str]], str]:
+    def replace(_match: re.Match[str]) -> str:
+        return value
+
+    return replace
+
+
 class Prompt(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -54,7 +63,15 @@ class Prompt(BaseModel):
         values = dict(kwargs)
         if input_text is not None:
             values.setdefault("input", input_text)
-        return self.template.format(**values)
+        rendered = self.template
+        for variable, value in values.items():
+            replacement = str(value)
+            rendered = re.sub(
+                r"\{\s*" + re.escape(variable) + r"\s*\}",
+                _literal_replacement(replacement),
+                rendered,
+            )
+        return rendered
 
     @classmethod
     def from_file(cls, path: str | Path) -> Prompt:

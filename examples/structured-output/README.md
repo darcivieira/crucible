@@ -43,6 +43,17 @@ uv run crucible validate \
 Use `gabarito.field-by-field.yaml` quando voce controla o gabarito manualmente e quer
 deixar a intencao clara:
 
+```yaml
+assertion:
+  type: field_by_field
+  weights:
+    risk: 95
+    summary: 5
+```
+
+Nesse exemplo, `risk` domina o score do caso. Em um classificador, o mesmo padrao
+poderia ser `classification: 95` e `text_validation: 5`.
+
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 from collections import Counter
@@ -208,6 +209,11 @@ class Optimizer:
             proposal = await self._refine(current_prompt, diagnosis, run.iterations)
             violations = proposal.violations(current_prompt)
             if violations:
+                if proposal.diff_summary == "reasoning model returned invalid JSON":
+                    previous_verdicts = iteration.verdicts
+                    pending_diagnosis = diagnosis
+                    pending_proposal = proposal
+                    continue
                 raise InvalidRefinement(", ".join(violations))
 
             current_prompt = Prompt(
@@ -357,14 +363,17 @@ class Optimizer:
             _diagnosis_prompt(prompt, self.config.target_model, failures, _memory(iterations)),
             self.config.reasoning_model.params,
         )
-        payload = _json_payload(completion.text)
+        try:
+            payload = _json_payload(completion.text)
+        except ValueError:
+            payload = {}
         return Diagnosis(
             pattern=str(payload.get("pattern", "Falhas sem padrão estruturado.")),
             hypothesis=str(
                 payload.get("hypothesis", "O prompt atual não especifica a resposta esperada.")
             ),
             category=str(payload.get("category", "INSTRUCTION_AMBIGUITY")),
-            confidence=float(payload.get("confidence", 0.5)),
+            confidence=_confidence(payload.get("confidence", 0.5)),
             is_model_limitation=bool(payload.get("is_model_limitation", False)),
         )
 
@@ -378,13 +387,21 @@ class Optimizer:
             _refinement_prompt(prompt, self.config.target_model, diagnosis, _memory(iterations)),
             self.config.reasoning_model.params,
         )
-        payload = _json_payload(completion.text)
+        try:
+            payload = _json_payload(completion.text)
+        except ValueError:
+            payload = {}
         return RefinementProposal(
             new_prompt=str(payload.get("new_prompt", prompt.template)),
-            diff_summary=str(payload.get("diff_summary", "")),
-            rationale=str(payload.get("rationale", "")),
+            diff_summary=str(payload.get("diff_summary", "reasoning model returned invalid JSON")),
+            rationale=str(
+                payload.get(
+                    "rationale",
+                    "The reasoning model did not return a parseable refinement payload.",
+                )
+            ),
             expected_improvement=str(payload.get("expected_improvement", "")),
-            confidence=float(payload.get("confidence", 0.5)),
+            confidence=_confidence(payload.get("confidence", 0.5)),
         )
 
     def _stop_reason(self, run: OptimizationRun) -> StopReason | None:
@@ -491,18 +508,43 @@ def _memory(iterations: list[Iteration]) -> list[IterationMemory]:
 
 def _json_payload(text: str) -> dict[str, Any]:
     cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("empty JSON payload")
     if cleaned.startswith("```json"):
         cleaned = cleaned.removeprefix("```json").removesuffix("```").strip()
     elif cleaned.startswith("```"):
         cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
     try:
-        return json.loads(cleaned)
+        return _ensure_dict(json.loads(cleaned))
     except json.JSONDecodeError:
         start = cleaned.find("{")
         end = cleaned.rfind("}") + 1
         if start >= 0 and end > start:
-            return json.loads(cleaned[start:end])
-        raise
+            candidate = cleaned[start:end]
+            try:
+                return _ensure_dict(json.loads(candidate))
+            except json.JSONDecodeError:
+                try:
+                    return _ensure_dict(ast.literal_eval(candidate))
+                except (SyntaxError, ValueError):
+                    pass
+        raise ValueError("could not parse JSON payload") from None
+
+
+def _ensure_dict(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("JSON payload must be an object")
+    return value
+
+
+def _confidence(value: Any) -> float:
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    if confidence > 1.0:
+        confidence = confidence / 100 if confidence > 10 else confidence / 10
+    return max(0.0, min(1.0, confidence))
 
 
 def _diagnosis_prompt(

@@ -115,6 +115,16 @@ def test_provider_payload_and_parse_shapes():
     assert llamacpp.parse({"content": "ok"}).text == "ok"
 
 
+def test_openai_chat_uses_max_completion_tokens_for_reasoning_models():
+    spec = ModelSpec(provider="openai", model_id="gpt-5.4", role="reasoning")
+    openai = OpenAIAdapter(spec, "http://localhost")
+
+    payload = openai.payload("prompt", spec.params)
+
+    assert "max_tokens" not in payload
+    assert payload["max_completion_tokens"] == spec.params.max_tokens
+
+
 def test_provider_payloads_include_structured_output_format():
     schema = {
         "type": "object",

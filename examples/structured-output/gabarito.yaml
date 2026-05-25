@@ -1,20 +1,12 @@
 name: structured-output
 version: v1
-description: Example gabarito for validating provider-level structured output.
+description: Example gabarito for comparing a structured payload using the schema from config.
 cases:
   - id: summary-001
-    input: "Cliente relatou atraso no pagamento, mas prometeu quitar em 7 dias."
+    input: "summary=pagamento em atraso com promessa de quitacao em 7 dias; risk=medium"
     expected_output: |
-      {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["summary", "risk"],
-        "properties": {
-          "summary": {"type": "string"},
-          "risk": {"type": "string", "enum": ["low", "medium", "high"]}
-        }
-      }
+      {'summary': 'pagamento em atraso com promessa de quitacao em 7 dias', 'risk': 'medium'}
     assertion:
       type: json_schema
     weight: 1.0
-    tags: [structured-output, json-schema]
+    tags: [structured-output, payload-comparison]

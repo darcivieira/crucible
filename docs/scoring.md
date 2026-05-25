@@ -79,10 +79,19 @@ aderir a um schema antes mesmo da avaliação.
 A assertion continua necessária. Ela é a medição empírica do contrato:
 
 - `output_format`: solicita/força formato na chamada ao modelo.
-- `json_schema`, `json_equal`, `field_by_field`: validam o output retornado.
+- `json_schema`: valida contrato estrutural; se `expected_output` for um payload e
+  houver schema em `target_model.output_format`, valida expected/actual contra esse
+  schema e compara campos.
+- `json_equal`: compara estruturas parseadas por igualdade total.
+- `field_by_field`: compara campos de objetos parseados e permite score parcial.
 
 Essa separação importa porque nem todo provider garante schema com a mesma força, e
 alguns modelos podem ignorar parcialmente o contrato.
+
+Em todos os casos estruturais, o Crucible tenta parsear strings comuns retornadas por
+LLMs: JSON válido, JSON dentro de blocos Markdown e literais simples com aspas
+simples. JSON válido com aspas duplas continua sendo o formato recomendado para
+gabaritos versionados.
 
 ## Worst Cases
 

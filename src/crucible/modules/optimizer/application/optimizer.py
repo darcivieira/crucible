@@ -285,6 +285,8 @@ class Optimizer:
             embedding_provider=self.embedding_provider,
             judge_params=(self.config.judge_model or self.config.reasoning_model).params,
             judge_params_list=[spec.params for spec in self.judge_specs],
+            target_output_format_type=self.config.target_model.output_format.type,
+            target_output_schema=self.config.target_model.output_format.schema_,
         )
         assertion = await test_case.assertion.evaluate(
             test_case.expected_output,

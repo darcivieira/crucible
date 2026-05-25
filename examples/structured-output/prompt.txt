@@ -1,4 +1,11 @@
-Analise o texto abaixo e retorne apenas JSON válido no formato solicitado pelo schema.
+Analise o texto abaixo e retorne apenas JSON valido no formato solicitado pelo schema.
+
+Campos:
+- summary: resumo curto em portugues.
+- risk: um de low, medium ou high.
+
+Se o texto vier no formato "summary=...; risk=...", copie exatamente esses valores
+para os campos correspondentes.
 
 Texto:
 {input}

@@ -41,6 +41,19 @@ Um caso individual com:
 - `weight`: peso no score global.
 - `tags`: agrupadores para breakdown de score.
 
+Quando o output do modelo é estruturado, `expected_output` pode ser o payload esperado:
+
+```yaml
+expected_output: |
+  {'classification': 'Prazo', 'text_validation': 'Intime-se no prazo de 5 dias.'}
+assertion:
+  type: json_schema
+```
+
+Se o `config.yaml` declara `target_model.output_format.type: json_schema`, o Crucible
+usa o schema do config para validar expected/actual e compara os campos parseados.
+Isso permite usar gabaritos gerados automaticamente sem reescrever cada assertion.
+
 ## Assertion
 
 Regra que compara `expected_output` com o output real do modelo. Assertions podem ser

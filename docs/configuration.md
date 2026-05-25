@@ -219,6 +219,36 @@ Use `output_format` junto com uma assertion estrutural no gabarito, por exemplo
 `json_schema` ou `field_by_field`. O primeiro solicita o formato ao modelo; a
 assertion mede se o resultado cumpriu o contrato.
 
+Quando o gabarito traz um payload esperado, mas a assertion veio como
+`json_schema`, o Crucible usa o schema de `target_model.output_format` como base
+comparativa:
+
+```yaml
+target_model:
+  output_format:
+    type: json_schema
+    schema:
+      type: object
+      required: [classification, text_validation]
+      properties:
+        classification:
+          type: string
+        text_validation:
+          type: string
+```
+
+```yaml
+expected_output: |
+  {'classification': 'Prazo', 'text_validation': 'Intime-se no prazo de 5 dias.'}
+assertion:
+  type: json_schema
+```
+
+Nesse fluxo, `expected_output` e output real são parseados, ambos são validados contra
+o schema do config e depois comparados campo a campo. Isso é útil para gabaritos
+gerados automaticamente. Para gabaritos escritos manualmente, `field_by_field` deixa
+a intenção mais clara.
+
 Veja exemplos completos em `examples/structured-output/`.
 
 ## Papéis

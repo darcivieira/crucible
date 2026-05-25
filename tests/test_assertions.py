@@ -49,6 +49,16 @@ async def test_json_equal_compares_structures():
 
 
 @pytest.mark.asyncio
+async def test_json_equal_accepts_json_like_strings():
+    result = await JsonEqual().evaluate(
+        "{'classification': 'Prazo'}",
+        "```json\n{'classification': 'Prazo'}\n```",
+        AssertionContext(),
+    )
+    assert result.passed is True
+
+
+@pytest.mark.asyncio
 async def test_field_by_field_returns_partial_score():
     result = await FieldByField().evaluate(
         '{"a": 1, "b": 2}', '{"a": 1, "b": 3}', AssertionContext()
@@ -58,12 +68,58 @@ async def test_field_by_field_returns_partial_score():
 
 
 @pytest.mark.asyncio
+async def test_field_by_field_extracts_json_like_payload_from_text():
+    result = await FieldByField().evaluate(
+        "{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        "Resposta:\n{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        AssertionContext(),
+    )
+    assert result.passed is True
+
+
+@pytest.mark.asyncio
 async def test_json_schema_accepts_schema_alias():
     assertion = JsonSchema.model_validate(
         {"type": "json_schema", "schema": {"type": "object", "required": ["ok"]}}
     )
     result = await assertion.evaluate("", '{"ok": true}', AssertionContext())
     assert result.passed is True
+
+
+@pytest.mark.asyncio
+async def test_json_schema_rejects_expected_payload_as_schema():
+    result = await JsonSchema().evaluate(
+        "{'classification': 'Prazo'}",
+        "{'classification': 'Prazo'}",
+        AssertionContext(),
+    )
+    assert result.passed is False
+    assert result.detail["error"] == "expected_output_must_be_json_schema"
+
+
+@pytest.mark.asyncio
+async def test_json_schema_compares_expected_payload_when_output_schema_is_configured():
+    context = AssertionContext(
+        target_output_format_type="json_schema",
+        target_output_schema={
+            "type": "object",
+            "required": ["classification", "text_validation"],
+            "properties": {
+                "classification": {"type": "string"},
+                "text_validation": {"type": "string"},
+            },
+        },
+    )
+
+    result = await JsonSchema().evaluate(
+        "{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        "Resposta:\n{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        context,
+    )
+
+    assert result.passed is True
+    assert result.detail["schema_source"] == "target_output_format"
+    assert result.detail["comparison_mode"] == "field_by_field"
 
 
 @pytest.mark.asyncio

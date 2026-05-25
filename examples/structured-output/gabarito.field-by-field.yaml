@@ -1,0 +1,12 @@
+name: structured-output-field-by-field
+version: v1
+description: Example gabarito for explicit field-by-field structured comparison.
+cases:
+  - id: summary-fields-001
+    input: "summary=pagamento em atraso com promessa de quitacao em 7 dias; risk=medium"
+    expected_output: |
+      {"summary": "pagamento em atraso com promessa de quitacao em 7 dias", "risk": "medium"}
+    assertion:
+      type: field_by_field
+    weight: 1.0
+    tags: [structured-output, field-by-field]

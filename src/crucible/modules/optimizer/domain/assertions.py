@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 import math
@@ -26,6 +27,8 @@ class AssertionContext(BaseModel):
     embedding_provider: Any | None = None
     judge_params: Any = None
     judge_params_list: list[Any] = Field(default_factory=list)
+    target_output_format_type: str | None = None
+    target_output_schema: dict[str, Any] = Field(default_factory=dict)
 
 
 class AssertionResult(BaseModel):
@@ -50,8 +53,124 @@ def _normalize(value: str) -> str:
     return " ".join(value.strip().split())
 
 
+_JSON_SCHEMA_KEYWORDS = {
+    "$defs",
+    "$id",
+    "$ref",
+    "$schema",
+    "additionalProperties",
+    "allOf",
+    "anyOf",
+    "const",
+    "contains",
+    "dependentRequired",
+    "dependentSchemas",
+    "description",
+    "enum",
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "format",
+    "items",
+    "maxItems",
+    "maxLength",
+    "maxProperties",
+    "maximum",
+    "minItems",
+    "minLength",
+    "minProperties",
+    "minimum",
+    "multipleOf",
+    "not",
+    "oneOf",
+    "pattern",
+    "patternProperties",
+    "prefixItems",
+    "properties",
+    "propertyNames",
+    "required",
+    "title",
+    "type",
+    "uniqueItems",
+}
+
+
 def _load_json(value: str) -> Any:
-    return json.loads(value)
+    text = _unwrap_json_text(value)
+    candidates = [text]
+    extracted = _extract_json_like(text)
+    if extracted is not None and extracted != text:
+        candidates.append(extracted)
+
+    first_error: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            first_error = first_error or exc
+        try:
+            return ast.literal_eval(candidate)
+        except (SyntaxError, ValueError):
+            continue
+    if first_error is not None:
+        raise first_error
+    raise json.JSONDecodeError("invalid structured value", text, 0)
+
+
+def _unwrap_json_text(value: str) -> str:
+    text = str(value).strip()
+    match = re.fullmatch(r"```(?:json|JSON)?\s*(.*?)\s*```", text, re.DOTALL)
+    return match.group(1).strip() if match else text
+
+
+def _extract_json_like(value: str) -> str | None:
+    object_start = value.find("{")
+    array_start = value.find("[")
+    starts = [index for index in (object_start, array_start) if index >= 0]
+    if not starts:
+        return None
+    start = min(starts)
+    close_char = "}" if value[start] == "{" else "]"
+    end = value.rfind(close_char)
+    if end <= start:
+        return None
+    return value[start : end + 1].strip()
+
+
+def _looks_like_json_schema(value: Any) -> bool:
+    if isinstance(value, bool):
+        return True
+    if not isinstance(value, dict):
+        return False
+    return not value or bool(_JSON_SCHEMA_KEYWORDS.intersection(value))
+
+
+def _not_json_schema_result() -> AssertionResult:
+    return AssertionResult(
+        score=0.0,
+        passed=False,
+        detail={
+            "error": "expected_output_must_be_json_schema",
+            "hint": (
+                "Use json_equal or field_by_field when expected_output is "
+                "the expected JSON payload."
+            ),
+        },
+    )
+
+
+
+def _compare_objects(expected: dict[str, Any], actual: dict[str, Any]) -> AssertionResult:
+    fields = list(expected.keys())
+    if not fields:
+        return AssertionResult(score=1.0, passed=True)
+
+    matched = sum(1 for field in fields if actual.get(field) == expected[field])
+    score = matched / len(fields)
+    return AssertionResult(
+        score=score,
+        passed=math.isclose(score, 1.0),
+        detail={"fields": fields, "comparison_mode": "field_by_field"},
+    )
 
 
 class ExactMatch(BaseAssertion):
@@ -129,7 +248,7 @@ class JsonEqual(BaseAssertion):
         try:
             expected_json = _load_json(expected)
             actual_json = _load_json(actual)
-        except json.JSONDecodeError as exc:
+        except ValueError as exc:
             return AssertionResult(score=0.0, passed=False, detail={"error": str(exc)})
         passed = expected_json == actual_json
         return AssertionResult(score=1.0 if passed else 0.0, passed=passed)
@@ -146,9 +265,29 @@ class JsonSchema(BaseAssertion):
         self, expected: str, actual: str, context: AssertionContext
     ) -> AssertionResult:
         try:
-            schema = self.json_schema or _load_json(expected)
+            schema = self.json_schema
+            expected_json = None
+            if schema is None:
+                expected_json = _load_json(expected)
+                schema = expected_json if _looks_like_json_schema(expected_json) else None
+            if schema is None:
+                if (
+                    context.target_output_format_type == "json_schema"
+                    and context.target_output_schema
+                ):
+                    actual_json = _load_json(actual)
+                    validate(instance=expected_json, schema=context.target_output_schema)
+                    validate(instance=actual_json, schema=context.target_output_schema)
+                    if isinstance(expected_json, dict) and isinstance(actual_json, dict):
+                        result = _compare_objects(expected_json, actual_json)
+                    else:
+                        passed = expected_json == actual_json
+                        result = AssertionResult(score=1.0 if passed else 0.0, passed=passed)
+                    result.detail["schema_source"] = "target_output_format"
+                    return result
+                return _not_json_schema_result()
             validate(instance=_load_json(actual), schema=schema)
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except (ValueError, ValidationError) as exc:
             return AssertionResult(score=0.0, passed=False, detail={"error": str(exc)})
         return AssertionResult(score=1.0, passed=True)
 
@@ -163,7 +302,7 @@ class FieldByField(BaseAssertion):
         try:
             expected_json = _load_json(expected)
             actual_json = _load_json(actual)
-        except json.JSONDecodeError as exc:
+        except ValueError as exc:
             return AssertionResult(score=0.0, passed=False, detail={"error": str(exc)})
         if not isinstance(expected_json, dict) or not isinstance(actual_json, dict):
             return AssertionResult(score=0.0, passed=False, detail={"error": "expected_objects"})

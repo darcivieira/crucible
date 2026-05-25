@@ -97,6 +97,10 @@ assertion:
 
 Compara estruturas JSON parseadas.
 
+Use quando o valor inteiro retornado pelo modelo precisa ser igual ao JSON esperado.
+O Crucible tenta parsear JSON válido, JSON dentro de blocos Markdown e literais simples
+com aspas simples, mas JSON válido com aspas duplas continua sendo o formato recomendado.
+
 ### `json_schema`
 
 ```yaml
@@ -120,6 +124,45 @@ assertion:
 Para também pedir que o provider force a saída estruturada na chamada do modelo, use
 `target_model.output_format` em `config.yaml`.
 
+Não use `json_schema` quando `expected_output` for o payload esperado:
+
+```yaml
+expected_output: '{"status":"ok","risk":"low"}'
+assertion:
+  type: field_by_field
+```
+
+Nesse caso use `json_equal` para igualdade completa ou `field_by_field` para comparar
+campo a campo com score parcial.
+
+Existe uma exceção pragmática: quando `target_model.output_format.type` está como
+`json_schema` no `config.yaml`, mas o gabarito gerado veio com `assertion.type:
+json_schema` e `expected_output` contém o payload esperado, o Crucible usa o schema
+do `config.yaml` para validar os dois lados e compara os campos parseados. Isso
+existe para suportar gabaritos vindos de pipelines externos, mas em gabaritos
+escritos manualmente prefira `field_by_field` ou `json_equal`.
+
+Exemplo típico vindo de YAML gerado:
+
+```yaml
+expected_output: |
+  {'classification': 'Prazo', 'text_validation': 'Intime-se no prazo de 5 dias.'}
+assertion:
+  type: json_schema
+```
+
+Com `target_model.output_format.type: json_schema`, isso não é tratado como schema
+inline. O valor é tratado como payload esperado, passa por parse junto com o output
+real e é comparado campo a campo.
+
+Quando houver textos longos, aspas ou dois-pontos no conteúdo, prefira bloco literal
+YAML com `|` para evitar erro de sintaxe no arquivo:
+
+```yaml
+expected_output: |
+  {'classification': 'Prazo', 'text_validation': 'Junte o documento: comprovante atualizado.'}
+```
+
 ## Assertions Estruturais
 
 ### `field_by_field`
@@ -134,6 +177,8 @@ assertion:
 ```
 
 Compara campos de objetos JSON e retorna score parcial.
+É a opção mais prática quando o modelo retorna uma string contendo JSON e o gabarito
+descreve os campos esperados, como classificação, status, risco ou justificativa.
 
 ### `pydantic_model`
 

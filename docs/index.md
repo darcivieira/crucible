@@ -68,7 +68,8 @@ Use este índice conforme o que você precisa fazer.
 ## Exemplos
 
 - [Projeto básico local](../examples/basic/)
-- [Saída estruturada com JSON Schema](../examples/structured-output/)
+- [Saída estruturada com JSON Schema](../examples/structured-output/): contrato,
+  payload esperado e comparação campo a campo.
 - [Triagem de suporte](../examples/customer-support-triage/)
 - [LLM-as-judge para risco](../examples/llm-judge-risk/)
 - [Train/val/test](../examples/train-val-test/)

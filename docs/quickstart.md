@@ -151,7 +151,8 @@ uv run crucible report --run latest --format pdf
 ## Saída Estruturada
 
 Quando o modelo deve responder em JSON seguindo um schema, use o exemplo em
-`examples/structured-output/`.
+`examples/structured-output/`. O exemplo padrão cobre o caso em que o gabarito traz
+o payload esperado em `expected_output`, enquanto o schema fica no `config.yaml`.
 
 OpenAI Responses API:
 
@@ -171,8 +172,32 @@ uv run crucible validate \
   --config ./examples/structured-output/config.ollama.yaml
 ```
 
-Esse exemplo usa duas camadas: `target_model.output_format` solicita o JSON Schema ao
-provider, e a assertion `json_schema` mede se a resposta cumpriu o contrato.
+Esse exemplo usa três camadas:
+
+- `target_model.output_format`: solicita o JSON Schema ao provider.
+- `expected_output`: guarda o payload esperado para aquele caso.
+- `assertion.type: json_schema`: valida expected/actual contra o schema do config e
+  compara os campos parseados.
+
+Quando você quer validar apenas o contrato estrutural, sem comparar valores
+esperados, use:
+
+```bash
+uv run crucible validate \
+  --prompt ./examples/structured-output/prompt.txt \
+  --gabarito ./examples/structured-output/gabarito.schema.yaml \
+  --config ./examples/structured-output/config.openai-responses.yaml
+```
+
+Quando você está escrevendo o gabarito manualmente e quer deixar a intenção explícita,
+use `field_by_field`:
+
+```bash
+uv run crucible validate \
+  --prompt ./examples/structured-output/prompt.txt \
+  --gabarito ./examples/structured-output/gabarito.field-by-field.yaml \
+  --config ./examples/structured-output/config.openai-responses.yaml
+```
 
 ## Workflow Recomendado
 

@@ -43,13 +43,13 @@ URLs padrão:
 
 O estado fica no volume nomeado `crucible-data`. Arquivos de trabalho ficam em
 `./workspace`, montado dentro do container em `/workspace`. Coloque ali prompts,
-gabaritos, configs e, quando necessário, um arquivo `.env`.
+gabaritos e configs. O arquivo `.env` da raiz é montado como `/workspace/.env`, que
+é onde o Crucible procura secrets dentro do container.
 
 Exemplo:
 
 ```text
 workspace/
-  .env
   prompt.txt
   gabarito.yaml
   config.yaml
@@ -72,9 +72,10 @@ URLs padrão:
 O compose de desenvolvimento também usa o volume nomeado `crucible-data` para
 persistir SQLite, reports, runs e cache em `/data`.
 
-Para usar providers externos no compose runtime, mantenha as variáveis em
-`workspace/.env`. O Crucible lê esse arquivo dentro do container, sem o Docker
-Compose precisar expandir e imprimir secrets em `docker compose config`.
+Para usar providers externos no compose runtime, mantenha as variáveis no `.env` da
+raiz do diretório onde o compose é executado. O arquivo é montado como read-only
+dentro do container, sem usar `env_file`; assim `docker compose config` não imprime
+os valores dos secrets.
 
 Exemplos:
 

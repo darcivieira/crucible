@@ -19,6 +19,7 @@ services:
     volumes:
       - crucible-data:/data
       - ./workspace:/workspace
+      - ./.env:/workspace/.env:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -46,6 +47,7 @@ services:
     volumes:
       - crucible-data:/data
       - ./workspace:/workspace
+      - ./.env:/workspace/.env:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

@@ -3,19 +3,20 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from crucible.core.settings import get_settings
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
-from crucible.modules.optimizer.application.optimizer import Optimizer
 from crucible.modules.optimizer.application.reports import write_report
-from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt
+from crucible.modules.optimizer.application.tasks import RunTaskRequest, run_task
+from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt, RunMode
 
 
 class CreateRunRequest(BaseModel):
     prompt: Prompt
     gabarito: Gabarito
     config: OptimizationConfig
+    mode: RunMode = Field(default="optimize")
 
 
 class CreatedRun(BaseModel):
@@ -34,7 +35,17 @@ def create_api_app(store: SQLiteRunStore | None = None) -> FastAPI:
     ) -> CreatedRun:
         task_id = uuid4().hex
         run_store.create_task(task_id, "queued")
-        background_tasks.add_task(_run_optimization, task_id, request, run_store)
+        background_tasks.add_task(
+            run_task,
+            task_id,
+            RunTaskRequest(
+                prompt=request.prompt,
+                gabarito=request.gabarito,
+                config=request.config,
+                mode=request.mode,
+            ),
+            run_store,
+        )
         return CreatedRun(task_id=task_id, status="queued")
 
     @app.get("/tasks/{task_id}")
@@ -75,28 +86,6 @@ def create_api_app(store: SQLiteRunStore | None = None) -> FastAPI:
         return {"path": str(path)}
 
     return app
-
-
-async def _run_optimization(
-    task_id: str,
-    request: CreateRunRequest,
-    store: SQLiteRunStore,
-) -> None:
-    store.update_task(task_id, "running")
-    try:
-        run = await Optimizer(
-            request.config,
-            store=store,
-            should_cancel=lambda: store.task_cancel_requested(task_id),
-        ).optimize(
-            request.prompt, request.gabarito
-        )
-        if run.status == "aborted":
-            store.update_task(task_id, "cancelled", run_id=run.id)
-        else:
-            store.update_task(task_id, "completed", run_id=run.id)
-    except Exception as exc:
-        store.update_task(task_id, "failed", error=str(exc))
 
 
 def run_api(host: str, port: int) -> None:

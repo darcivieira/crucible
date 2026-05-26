@@ -13,6 +13,7 @@ from crucible.modules.optimizer.domain.models import OptimizationRun
 
 class RunSummary(BaseModel):
     id: str
+    run_mode: str = "optimize"
     status: str
     stop_reason: str | None
     best_score: float | None
@@ -100,11 +101,12 @@ class SQLiteRunStore:
             conn.execute(
                 """
                 INSERT INTO runs (
-                    id, status, stop_reason, best_score, best_version, total_cost_usd,
+                    id, run_mode, status, stop_reason, best_score, best_version, total_cost_usd,
                     iterations_count, target_model, reasoning_model, started_at, ended_at, payload
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
+                    run_mode=excluded.run_mode,
                     status=excluded.status,
                     stop_reason=excluded.stop_reason,
                     best_score=excluded.best_score,
@@ -119,6 +121,7 @@ class SQLiteRunStore:
                 """,
                 (
                     summary.id,
+                    summary.run_mode,
                     summary.status,
                     summary.stop_reason,
                     summary.best_score,
@@ -288,6 +291,7 @@ class SQLiteRunStore:
                 """
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY,
+                    run_mode TEXT NOT NULL DEFAULT 'optimize',
                     status TEXT NOT NULL,
                     stop_reason TEXT,
                     best_score REAL,
@@ -348,6 +352,13 @@ class SQLiteRunStore:
                 CREATE INDEX IF NOT EXISTS idx_api_tasks_updated ON api_tasks(updated_at);
                 """
             )
+            existing_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+            }
+            if "run_mode" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE runs ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'optimize'"
+                )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -383,6 +394,7 @@ def _summary(run: OptimizationRun) -> RunSummary:
     best = run.best_iteration
     return RunSummary(
         id=run.id,
+        run_mode=run.run_mode,
         status=run.status,
         stop_reason=run.stop_reason,
         best_score=best.score if best else None,

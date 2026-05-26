@@ -15,6 +15,12 @@ from crucible import (
     TestCase as CrucibleTestCase,
 )
 from crucible.modules.optimizer.adapters.providers.fake import FakeProvider
+from crucible.modules.optimizer.application.contracts import (
+    build_task_contract,
+    validate_refinement_against_contract,
+)
+from crucible.modules.optimizer.domain.assertions import FieldByField
+from crucible.modules.optimizer.domain.models import ModelOutputFormat, RefinementProposal
 
 
 class MemoryStore:
@@ -184,10 +190,283 @@ async def test_optimize_normalizes_reasoning_confidence_scales():
     assert run.iterations[1].refinement_rationale == "forces expected answer"
 
 
+def test_task_contract_detects_literal_extraction_from_prompt_and_gabarito():
+    config = _config()
+    config.target_model.output_format = ModelOutputFormat(
+        type="json_schema",
+        schema={
+            "type": "object",
+            "required": ["classification", "text_validation"],
+            "properties": {
+                "classification": {
+                    "type": "string",
+                    "enum": ["Nenhum", "Prazo"],
+                },
+                "text_validation": {"type": "string"},
+            },
+        },
+    )
+    gabarito = Gabarito(
+        name="sample",
+        version="v1",
+        cases=[
+            CrucibleTestCase(
+                id="case-1",
+                input="Intime-se no prazo de 5 dias.",
+                expected_output=(
+                    '{"classification": "Prazo", '
+                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                ),
+                assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
+            )
+        ],
+    )
+
+    contract = build_task_contract(
+        Prompt(
+            template="Classifique e extraia o trecho exato que justifica a classe.\n{input}",
+            variables=["input"],
+        ),
+        gabarito,
+        config,
+    )
+
+    assert "text_validation" in contract.literal_extraction_fields
+    assert contract.output_contract["fields"] == ["classification", "text_validation"]
+    assert any("extração literal" in rule.text for rule in contract.invariants)
+
+
+def test_contract_accepts_equivalent_no_invention_wording():
+    config = _config()
+    gabarito = _gabarito()
+    current = Prompt(
+        template="Não invente informação.\n{input}",
+        variables=["input"],
+    )
+    contract = build_task_contract(current, gabarito, config)
+    proposal = RefinementProposal(
+        new_prompt="Responda com base apenas nas informações presentes no input.\n{input}",
+        diff_summary="preserves no invention",
+        rationale="keeps source-bound behavior",
+        confidence=0.8,
+    )
+
+    violations = validate_refinement_against_contract(proposal, current, contract)
+
+    assert "regra de não inventar informação foi removida" not in violations
+
+
+@pytest.mark.asyncio
+async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_inference():
+    calls = {"reasoning": 0}
+    config = _config(max_iterations=2, threshold=100)
+    config.max_refinement_repair_attempts = 2
+    config.target_model.output_format = ModelOutputFormat(
+        type="json_schema",
+        schema={
+            "type": "object",
+            "required": ["classification", "text_validation"],
+            "properties": {
+                "classification": {
+                    "type": "string",
+                    "enum": ["Nenhum", "Prazo"],
+                },
+                "text_validation": {"type": "string"},
+            },
+        },
+    )
+    gabarito = Gabarito(
+        name="sample",
+        version="v1",
+        cases=[
+            CrucibleTestCase(
+                id="case-1",
+                input="Intime-se no prazo de 5 dias.",
+                expected_output=(
+                    '{"classification": "Prazo", '
+                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                ),
+                assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
+            )
+        ],
+    )
+
+    def reasoning_response(prompt):
+        calls["reasoning"] += 1
+        if calls["reasoning"] == 1:
+            assert "CONTRATO DA TAREFA" in prompt
+            return json.dumps(
+                {
+                    "pattern": "text_validation is inferred",
+                    "hypothesis": "prompt needs stronger evidence extraction",
+                    "category": "LITERAL_EXTRACTION",
+                    "confidence": 0.9,
+                    "is_model_limitation": False,
+                }
+            )
+        assert (
+            "CASOS FALHOS QUE MOTIVAM O REFINO" in prompt
+            or "VIOLAÇÕES QUE DEVEM SER CORRIGIDAS" in prompt
+        )
+        return json.dumps(
+            {
+                "new_prompt": (
+                    "Classifique em classification e explique por que em text_validation. {input}"
+                ),
+                "diff_summary": "turns evidence into rationale",
+                "rationale": "asks for explanation",
+                "expected_improvement": "more descriptive output",
+                "preserved_invariants": [],
+                "changed_behavior": ["text_validation becomes rationale"],
+                "risk_of_regression": "high",
+                "confidence": 0.8,
+            }
+        )
+
+    initial = Prompt(
+        template=(
+            "Classifique a publicação e extraia o trecho exato em text_validation. "
+            "Não invente informação.\n{input}"
+        ),
+        variables=["input"],
+    )
+    optimizer = Optimizer(
+        config,
+        target_provider=FakeProvider(
+            lambda prompt: (
+                '{"classification": "Prazo", "text_validation": "O texto contém prazo."}'
+            )
+        ),
+        reasoning_provider=FakeProvider(reasoning_response),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.optimize(initial, gabarito)
+
+    assert run.stop_reason == "reasoning_failed_to_refine"
+    assert run.task_contract is not None
+    assert run.iterations[0].refinement_rejected_reason is not None
+    assert len(run.iterations[0].refinement_repair_attempts) == 2
+    assert "explicação/inferência" in run.iterations[0].refinement_rejected_reason
+    assert len(run.iterations) == 1
+
+
+@pytest.mark.asyncio
+async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration():
+    calls = {"target": 0, "reasoning": 0}
+    config = _config(max_iterations=3, threshold=100)
+    config.max_refinement_repair_attempts = 3
+    config.target_model.output_format = ModelOutputFormat(
+        type="json_schema",
+        schema={
+            "type": "object",
+            "required": ["classification", "text_validation"],
+            "properties": {
+                "classification": {"type": "string", "enum": ["Nenhum", "Prazo"]},
+                "text_validation": {"type": "string"},
+            },
+        },
+    )
+    gabarito = Gabarito(
+        name="sample",
+        version="v1",
+        cases=[
+            CrucibleTestCase(
+                id="case-1",
+                input="Intime-se no prazo de 5 dias.",
+                expected_output=(
+                    '{"classification": "Prazo", '
+                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                ),
+                assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
+            )
+        ],
+    )
+
+    def target_response(prompt):
+        calls["target"] += 1
+        if calls["target"] == 1:
+            return '{"classification": "Prazo", "text_validation": "O texto contém prazo."}'
+        return (
+            '{"classification": "Prazo", '
+            '"text_validation": "Intime-se no prazo de 5 dias."}'
+        )
+
+    def reasoning_response(prompt):
+        calls["reasoning"] += 1
+        if calls["reasoning"] == 1:
+            return json.dumps(
+                {
+                    "pattern": "text_validation is inferred",
+                    "hypothesis": "prompt needs literal extraction",
+                    "category": "LITERAL_EXTRACTION",
+                    "confidence": 0.9,
+                    "is_model_limitation": False,
+                }
+            )
+        if calls["reasoning"] == 2:
+            return json.dumps(
+                {
+                    "new_prompt": (
+                        "Classifique em classification e explique por que em text_validation. "
+                        "{input}"
+                    ),
+                    "diff_summary": "turns evidence into rationale",
+                    "rationale": "asks for explanation",
+                    "expected_improvement": "more descriptive output",
+                    "confidence": 0.8,
+                }
+            )
+        assert "VIOLAÇÕES QUE DEVEM SER CORRIGIDAS" in prompt
+        return json.dumps(
+            {
+                "new_prompt": (
+                    "Classifique em classification. Extraia de forma literal/fiel o trecho "
+                    "em text_validation. Use apenas informações presentes no input.\n{input}"
+                ),
+                "diff_summary": "repairs literal extraction and source constraint",
+                "rationale": "preserves the task contract",
+                "expected_improvement": "prevents inferred rationale",
+                "preserved_invariants": ["extração literal", "não inventar"],
+                "changed_behavior": ["text_validation is exact evidence"],
+                "risk_of_regression": "low",
+                "confidence": 0.9,
+            }
+        )
+
+    initial = Prompt(
+        template=(
+            "Classifique a publicação e extraia o trecho exato em text_validation. "
+            "Não invente informação.\n{input}"
+        ),
+        variables=["input"],
+    )
+    optimizer = Optimizer(
+        config,
+        target_provider=FakeProvider(target_response),
+        reasoning_provider=FakeProvider(reasoning_response),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.optimize(initial, gabarito)
+
+    assert run.stop_reason == "threshold_reached"
+    assert calls["target"] == 2
+    assert len(run.iterations) == 2
+    assert len(run.iterations[0].refinement_repair_attempts) == 1
+    assert run.iterations[1].prompt.template.startswith("Classifique em classification")
+
+
 @pytest.mark.asyncio
 async def test_optimize_keeps_current_prompt_when_reasoning_returns_invalid_json():
+    config = _config(max_iterations=2, threshold=100)
+    config.max_refinement_repair_attempts = 2
     optimizer = Optimizer(
-        _config(max_iterations=2, threshold=100),
+        config,
         target_provider=FakeProvider(lambda prompt: "wrong"),
         reasoning_provider=FakeProvider(lambda prompt: ""),
         judge_provider=FakeProvider(),
@@ -197,10 +476,13 @@ async def test_optimize_keeps_current_prompt_when_reasoning_returns_invalid_json
 
     run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
 
-    assert run.stop_reason == "max_iterations"
-    assert len(run.iterations) == 2
-    assert run.iterations[1].diagnosis is not None
-    assert run.iterations[1].diff_summary == "reasoning model returned invalid JSON"
+    assert run.stop_reason == "reasoning_failed_to_refine"
+    assert len(run.iterations) == 1
+    assert run.iterations[0].diagnosis is None
+    assert len(run.iterations[0].refinement_repair_attempts) == 2
+    assert run.iterations[0].refinement_repair_attempts[0].diff_summary == (
+        "reasoning model returned invalid JSON"
+    )
     assert run.best_iteration is not None
     assert run.best_iteration.prompt.template == "{input}"
 

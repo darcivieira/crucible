@@ -11,7 +11,6 @@ from statistics import mean, pstdev
 from time import perf_counter
 from typing import Any
 
-from crucible.core.exceptions import InvalidRefinement
 from crucible.core.settings import get_settings
 from crucible.modules.optimizer.adapters.cache import JsonlExecutionCache, execution_cache_key
 from crucible.modules.optimizer.adapters.providers.factory import (
@@ -24,6 +23,10 @@ from crucible.modules.optimizer.adapters.storage import (
     SQLiteRunStore,
 )
 from crucible.modules.optimizer.application.active_learning import suggest_cases
+from crucible.modules.optimizer.application.contracts import (
+    build_task_contract,
+    validate_refinement_against_contract,
+)
 from crucible.modules.optimizer.application.estimates import estimate_cost
 from crucible.modules.optimizer.application.execution_backends import execution_backend
 from crucible.modules.optimizer.application.multi_objective import update_multi_objective
@@ -41,7 +44,9 @@ from crucible.modules.optimizer.domain.models import (
     OptimizationRun,
     Prompt,
     RefinementProposal,
+    RefinementRepairAttempt,
     StopReason,
+    TaskContract,
     TestCase,
     Verdict,
 )
@@ -134,8 +139,10 @@ class Optimizer:
         return await self._optimize_loop(prompt, gabarito)
 
     async def _optimize_loop(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
+        task_contract = build_task_contract(prompt, gabarito, self.config)
         run = OptimizationRun(
             config=self.config,
+            task_contract=task_contract,
             gabarito_hash=gabarito.content_hash,
             initial_prompt_hash=prompt.content_hash,
         )
@@ -205,16 +212,36 @@ class Optimizer:
                 await self.store.save_run(run)
                 return run
 
-            diagnosis = await self._diagnose(current_prompt, failures, run.iterations)
-            proposal = await self._refine(current_prompt, diagnosis, run.iterations)
-            violations = proposal.violations(current_prompt)
-            if violations:
-                if proposal.diff_summary == "reasoning model returned invalid JSON":
-                    previous_verdicts = iteration.verdicts
-                    pending_diagnosis = diagnosis
-                    pending_proposal = proposal
-                    continue
-                raise InvalidRefinement(", ".join(violations))
+            diagnosis = await self._diagnose(
+                current_prompt,
+                failures,
+                run.iterations,
+                task_contract,
+            )
+            proposal, repair_attempts, violations = await self._refine_until_valid(
+                current_prompt,
+                diagnosis,
+                failures,
+                run.iterations,
+                task_contract,
+            )
+            iteration.refinement_repair_attempts = repair_attempts
+            if proposal is None:
+                iteration.refinement_rejected_reason = (
+                    "reasoning model failed to produce a valid refinement after "
+                    f"{len(repair_attempts)} attempts: {'; '.join(violations)}"
+                )
+                run.status = "completed"
+                run.stop_reason = "reasoning_failed_to_refine"
+                run.ended_at = datetime.now(UTC)
+                update_multi_objective(run)
+                run.active_learning_suggestions = suggest_cases(
+                    run, self.config.active_learning_suggestions
+                )
+                await self.store.save_run(run)
+                return run
+            if repair_attempts:
+                await self.store.save_run(run)
 
             current_prompt = Prompt(
                 template=proposal.new_prompt,
@@ -358,9 +385,16 @@ class Optimizer:
         prompt: Prompt,
         failures: list[Verdict],
         iterations: list[Iteration],
+        task_contract: TaskContract,
     ) -> Diagnosis:
         completion = await self.reasoning_provider.complete(
-            _diagnosis_prompt(prompt, self.config.target_model, failures, _memory(iterations)),
+            _diagnosis_prompt(
+                prompt,
+                self.config.target_model,
+                failures,
+                _memory(iterations),
+                task_contract,
+            ),
             self.config.reasoning_model.params,
         )
         try:
@@ -381,28 +415,102 @@ class Optimizer:
         self,
         prompt: Prompt,
         diagnosis: Diagnosis,
+        failures: list[Verdict],
         iterations: list[Iteration],
+        task_contract: TaskContract,
     ) -> RefinementProposal:
         completion = await self.reasoning_provider.complete(
-            _refinement_prompt(prompt, self.config.target_model, diagnosis, _memory(iterations)),
+            _refinement_prompt(
+                prompt,
+                self.config.target_model,
+                diagnosis,
+                failures,
+                _memory(iterations),
+                task_contract,
+            ),
             self.config.reasoning_model.params,
         )
-        try:
-            payload = _json_payload(completion.text)
-        except ValueError:
-            payload = {}
-        return RefinementProposal(
-            new_prompt=str(payload.get("new_prompt", prompt.template)),
-            diff_summary=str(payload.get("diff_summary", "reasoning model returned invalid JSON")),
-            rationale=str(
-                payload.get(
-                    "rationale",
-                    "The reasoning model did not return a parseable refinement payload.",
+        return _proposal_from_completion(completion.text, prompt)
+
+    async def _refine_until_valid(
+        self,
+        prompt: Prompt,
+        diagnosis: Diagnosis,
+        failures: list[Verdict],
+        iterations: list[Iteration],
+        task_contract: TaskContract,
+    ) -> tuple[RefinementProposal | None, list[RefinementRepairAttempt], list[str]]:
+        repair_attempts: list[RefinementRepairAttempt] = []
+        violations: list[str] = []
+        proposal: RefinementProposal | None = None
+        max_attempts = self.config.max_refinement_repair_attempts
+        for attempt in range(1, max_attempts + 1):
+            if attempt == 1:
+                proposal = await self._refine(
+                    prompt,
+                    diagnosis,
+                    failures,
+                    iterations,
+                    task_contract,
                 )
+            else:
+                proposal = await self._repair_refinement(
+                    prompt,
+                    diagnosis,
+                    failures,
+                    iterations,
+                    task_contract,
+                    proposal,
+                    violations,
+                    attempt,
+                    max_attempts,
+                )
+            violations = validate_refinement_against_contract(
+                proposal,
+                prompt,
+                task_contract,
+            )
+            if not violations:
+                return proposal, repair_attempts, []
+            repair_attempts.append(
+                RefinementRepairAttempt(
+                    attempt=attempt,
+                    violations=violations,
+                    proposed_prompt=proposal.new_prompt,
+                    diff_summary=proposal.diff_summary,
+                    rationale=proposal.rationale,
+                )
+            )
+        return None, repair_attempts, violations
+
+    async def _repair_refinement(
+        self,
+        prompt: Prompt,
+        diagnosis: Diagnosis,
+        failures: list[Verdict],
+        iterations: list[Iteration],
+        task_contract: TaskContract,
+        rejected_proposal: RefinementProposal | None,
+        violations: list[str],
+        attempt: int,
+        max_attempts: int,
+    ) -> RefinementProposal:
+        completion = await self.reasoning_provider.complete(
+            _repair_refinement_prompt(
+                prompt,
+                self.config.target_model,
+                diagnosis,
+                failures,
+                _memory(iterations),
+                task_contract,
+                rejected_proposal,
+                violations,
+                attempt,
+                max_attempts,
             ),
-            expected_improvement=str(payload.get("expected_improvement", "")),
-            confidence=_confidence(payload.get("confidence", 0.5)),
+            self.config.reasoning_model.params,
         )
+        return _proposal_from_completion(completion.text, prompt)
 
     def _stop_reason(self, run: OptimizationRun) -> StopReason | None:
         best = run.best_iteration
@@ -426,6 +534,30 @@ class Optimizer:
         if asyncio.iscoroutine(result):
             return bool(await result)
         return bool(result)
+
+
+def _proposal_from_completion(text: str, prompt: Prompt) -> RefinementProposal:
+    try:
+        payload = _json_payload(text)
+    except ValueError:
+        payload = {}
+    return RefinementProposal(
+        new_prompt=str(payload.get("new_prompt", prompt.template)),
+        diff_summary=str(payload.get("diff_summary", "reasoning model returned invalid JSON")),
+        rationale=str(
+            payload.get(
+                "rationale",
+                "The reasoning model did not return a parseable refinement payload.",
+            )
+        ),
+        expected_improvement=str(payload.get("expected_improvement", "")),
+        preserved_invariants=[
+            str(item) for item in payload.get("preserved_invariants", []) or []
+        ],
+        changed_behavior=[str(item) for item in payload.get("changed_behavior", []) or []],
+        risk_of_regression=str(payload.get("risk_of_regression", "unknown")),
+        confidence=_confidence(payload.get("confidence", 0.5)),
+    )
 
 
 def select_failures_for_refinement(verdicts: list[Verdict], max_cases: int = 10) -> list[Verdict]:
@@ -501,6 +633,7 @@ def _memory(iterations: list[Iteration]) -> list[IterationMemory]:
             proposed_change=iteration.refinement_rationale,
             diff_summary=iteration.diff_summary,
             failure_pattern=iteration.diagnosis.pattern if iteration.diagnosis else None,
+            rejected_refinement_reason=iteration.refinement_rejected_reason,
         )
         for iteration in iterations
     ]
@@ -552,6 +685,7 @@ def _diagnosis_prompt(
     target_model: ModelSpec,
     failures: list[Verdict],
     history: list[IterationMemory],
+    task_contract: TaskContract,
 ) -> str:
     target = f"{target_model.provider}/{target_model.model_id}"
     cases = "\n\n".join(
@@ -568,8 +702,12 @@ def _diagnosis_prompt(
     return (
         f"Você é especialista em prompt engineering para {target}.\n\n"
         f"PROMPT ATUAL:\n---\n{prompt.template}\n---\n\n"
+        f"CONTRATO DA TAREFA (fonte da verdade para preservar comportamento):\n"
+        f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
         f"HISTÓRICO:\n{[item.model_dump() for item in history]}\n\n"
         f"CASOS FALHOS:\n{cases}\n\n"
+        "Classifique a falha como erro de classificação, extração literal, formato, "
+        "ambiguidade do prompt, limitação do modelo ou possível inconsistência do gabarito. "
         "Retorne JSON estrito com pattern, hypothesis, category, confidence e is_model_limitation."
     )
 
@@ -578,15 +716,88 @@ def _refinement_prompt(
     prompt: Prompt,
     target_model: ModelSpec,
     diagnosis: Diagnosis,
+    failures: list[Verdict],
     history: list[IterationMemory],
+    task_contract: TaskContract,
 ) -> str:
+    cases = "\n\n".join(
+        (
+            f"Caso {verdict.test_case.id} score={verdict.score}\n"
+            f"EXPECTED:\n{verdict.test_case.expected_output}\n"
+            f"ACTUAL:\n{verdict.execution.actual_output}\n"
+            f"ASSERTION:\n{verdict.test_case.assertion.type}\n"
+            f"DETAIL:\n{verdict.assertion_detail}"
+        )
+        for verdict in failures
+    )
     return (
         f"Você está refatorando um prompt para {target_model.provider}/{target_model.model_id}.\n\n"
         f"PROMPT ATUAL:\n---\n{prompt.template}\n---\n\n"
+        f"CONTRATO DA TAREFA (não viole):\n"
+        f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
         f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
         f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
         f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
+        f"CASOS FALHOS QUE MOTIVAM O REFINO:\n{cases}\n\n"
+        "Regras obrigatórias: preserve a intenção do prompt inicial; trate o gabarito "
+        "como fonte da verdade quando o prompt for omisso; não transforme extração "
+        "literal em explicação, resumo ou inferência; não otimize um caso removendo "
+        "comportamentos que já passavam.\n\n"
         "Retorne JSON estrito com new_prompt, diff_summary, rationale, "
-        "expected_improvement e confidence. "
+        "expected_improvement, preserved_invariants, changed_behavior, "
+        "risk_of_regression e confidence. "
         "Mantenha todas as variáveis obrigatórias no novo prompt."
+    )
+
+
+def _repair_refinement_prompt(
+    prompt: Prompt,
+    target_model: ModelSpec,
+    diagnosis: Diagnosis,
+    failures: list[Verdict],
+    history: list[IterationMemory],
+    task_contract: TaskContract,
+    rejected_proposal: RefinementProposal | None,
+    violations: list[str],
+    attempt: int,
+    max_attempts: int,
+) -> str:
+    cases = "\n\n".join(
+        (
+            f"Caso {verdict.test_case.id} score={verdict.score}\n"
+            f"EXPECTED:\n{verdict.test_case.expected_output}\n"
+            f"ACTUAL:\n{verdict.execution.actual_output}\n"
+            f"ASSERTION:\n{verdict.test_case.assertion.type}\n"
+            f"DETAIL:\n{verdict.assertion_detail}"
+        )
+        for verdict in failures
+    )
+    rejected = (
+        rejected_proposal.model_dump(mode="json")
+        if rejected_proposal is not None
+        else {"new_prompt": prompt.template}
+    )
+    return (
+        f"Você está na tentativa {attempt}/{max_attempts} de reparar um refino de prompt "
+        f"para {target_model.provider}/{target_model.model_id}.\n\n"
+        "A proposta anterior foi rejeitada pelo contrato da tarefa. Gere uma nova proposta; "
+        "não repita o mesmo erro e não rode uma explicação fora do JSON.\n\n"
+        f"PROMPT ATUAL QUE DEVE SER REFINADO:\n---\n{prompt.template}\n---\n\n"
+        f"PROPOSTA REJEITADA:\n{json.dumps(rejected, ensure_ascii=False, indent=2)}\n\n"
+        f"VIOLAÇÕES QUE DEVEM SER CORRIGIDAS:\n"
+        f"{json.dumps(violations, ensure_ascii=False, indent=2)}\n\n"
+        f"CONTRATO DA TAREFA (fonte da verdade, obrigatório preservar):\n"
+        f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
+        f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
+        f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
+        f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
+        f"CASOS FALHOS QUE MOTIVAM O REPARO:\n{cases}\n\n"
+        "Corrija especificamente cada violação. Preserve campos de saída, variáveis, "
+        "restrições negativas, regras de extração literal e a fonte da verdade do gabarito. "
+        "Se text_validation representa trecho textual, mantenha extração fiel do input; "
+        "não substitua por justificativa inferida. Se houver regra de não inventar, use "
+        "apenas informações presentes no input.\n\n"
+        "Retorne JSON estrito com new_prompt, diff_summary, rationale, "
+        "expected_improvement, preserved_invariants, changed_behavior, "
+        "risk_of_regression e confidence."
     )

@@ -4,7 +4,7 @@ import html
 import json
 from pathlib import Path
 
-from crucible.modules.optimizer.domain.models import OptimizationRun
+from crucible.modules.optimizer.domain.models import Iteration, OptimizationRun
 
 
 def write_report(run: OptimizationRun, reports_dir: Path, format: str = "html") -> Path:
@@ -42,13 +42,18 @@ def render_html_report(run: OptimizationRun) -> str:
             f"<td>{iteration.score_report.pass_rate:.0%}</td>"
             f"<td>${iteration.score_report.operational.total_cost_usd:.4f}</td>"
             f"<td>{iteration.score_report.operational.p95_latency_ms:.0f}</td>"
-            f"<td>{html.escape(iteration.diff_summary or '')}</td>"
+            f"<td>{html.escape(_iteration_change(iteration))}</td>"
             "</tr>"
         )
         for iteration in run.iterations
     )
     worst_cases = best.score_report.worst_case_ids if best else []
     score_history = [iteration.score for iteration in run.iterations]
+    task_contract = (
+        json.dumps(run.task_contract.model_dump(mode="json"), indent=2, ensure_ascii=False)
+        if run.task_contract
+        else "{}"
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -90,6 +95,8 @@ def render_html_report(run: OptimizationRun) -> str:
   </table>
   <h2>Score History</h2>
   <pre>{html.escape(json.dumps(score_history, indent=2))}</pre>
+  <h2>Task Contract</h2>
+  <pre>{html.escape(task_contract)}</pre>
   <h2>Worst Cases In Best Iteration</h2>
   <pre>{html.escape(json.dumps(worst_cases, indent=2))}</pre>
   <h2>Best Prompt</h2>
@@ -97,3 +104,16 @@ def render_html_report(run: OptimizationRun) -> str:
 </body>
 </html>
 """
+
+
+def _iteration_change(iteration: Iteration) -> str:
+    change = iteration.diff_summary or ""
+    if iteration.refinement_repair_attempts:
+        repair_lines = [
+            f"Repair attempt {attempt.attempt}: {', '.join(attempt.violations)}"
+            for attempt in iteration.refinement_repair_attempts
+        ]
+        change = f"{change}\n" + "\n".join(repair_lines)
+    if iteration.refinement_rejected_reason:
+        change = f"{change}\nRejected refinement: {iteration.refinement_rejected_reason}".strip()
+    return change

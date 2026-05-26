@@ -220,6 +220,12 @@ Se você precisa que `classification` represente 95% da decisão, prefira
 usa comparação campo a campo sem pesos; ela existe para gabaritos gerados
 automaticamente, não para expressar prioridade entre chaves.
 
+Durante `optimize`, esses exemplos estruturados também ajudam a montar o contrato da
+tarefa. Se o gabarito mostra que `text_validation` deve conter um trecho literal, o
+refiner não pode transformar esse campo em uma justificativa inferida. Se tentar, a
+proposta é rejeitada e o `reasoning_model` recebe as violações para gerar outro
+prompt, sem nova execução do target com o prompt antigo.
+
 ### `pydantic_model`
 
 ```yaml
@@ -298,6 +304,22 @@ Boas tags geralmente representam:
 - conceito de domínio;
 - dificuldade;
 - formato de saída.
+
+## Gabarito Como Fonte Da Verdade No Optimize
+
+Durante `optimize`, o Crucible usa o gabarito também para construir o contrato da
+tarefa. Esse contrato orienta o `reasoning_model` e impede que o prompt novo degrade
+requisitos críticos.
+
+Exemplo: se `expected_output` mostra que `text_validation` deve conter o trecho
+literal que levou à classificação, o refino não deve transformar esse campo em uma
+explicação inferida. A diferença é:
+
+- correto: `"text_validation": "Intime-se no prazo de 5 dias."`
+- incorreto: `"text_validation": "O texto contém uma intimação com prazo."`
+
+Quando o prompt inicial não explicita esse detalhe, o padrão observado no gabarito é
+tratado como fonte da verdade para o refino.
 
 ## Boas Práticas
 

@@ -42,6 +42,7 @@ Use este índice conforme o que você precisa fazer.
 - [SDK Python](sdk.md): use Crucible programaticamente.
 - [REST API](api.md): crie runs e consulte histórico via HTTP.
 - [Dashboard](dashboard.md): inspecione runs, verdicts, diffs e regressões.
+- [Docker](docker.md): rode dashboard/API/CLI em container e publique imagem.
 - [Operação](operations.md): estado local, custos, segredos, CI e limpeza.
 - [Release](release.md): checks, smoke tests e artefatos para publicação open source.
 - [UX e Interfaces](interfaces.md): visão prática das superfícies CLI, SDK, API,

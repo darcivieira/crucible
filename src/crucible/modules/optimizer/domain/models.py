@@ -30,6 +30,8 @@ SelectionStrategy = Literal["quality", "multi_objective"]
 ModelApiMode = Literal["chat_completions", "responses"]
 OutputFormatType = Literal["text", "json_object", "json_schema"]
 RunStatus = Literal["running", "completed", "failed", "aborted"]
+RunMode = Literal["validate", "optimize"]
+TaskContractSource = Literal["prompt", "config", "gabarito", "heuristic"]
 StopReason = Literal[
     "threshold_reached",
     "max_iterations",
@@ -38,6 +40,8 @@ StopReason = Literal[
     "plateau",
     "no_failures",
     "cancelled",
+    "validation_only",
+    "reasoning_failed_to_refine",
 ]
 
 
@@ -241,6 +245,21 @@ class ActiveLearningSuggestion(BaseModel):
     unstable: bool = False
 
 
+class ContractRule(BaseModel):
+    text: str
+    source: TaskContractSource
+    critical: bool = True
+
+
+class TaskContract(BaseModel):
+    objective: str = ""
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    invariants: list[ContractRule] = Field(default_factory=list)
+    literal_extraction_fields: list[str] = Field(default_factory=list)
+    negative_rules: list[ContractRule] = Field(default_factory=list)
+    examples: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class Diagnosis(BaseModel):
     pattern: str
     hypothesis: str
@@ -254,6 +273,9 @@ class RefinementProposal(BaseModel):
     diff_summary: str
     rationale: str
     expected_improvement: str = ""
+    preserved_invariants: list[str] = Field(default_factory=list)
+    changed_behavior: list[str] = Field(default_factory=list)
+    risk_of_regression: str = "unknown"
     confidence: float = Field(ge=0.0, le=1.0)
 
     def violations(self, current: Prompt) -> list[str]:
@@ -267,6 +289,14 @@ class RefinementProposal(BaseModel):
         return violations
 
 
+class RefinementRepairAttempt(BaseModel):
+    attempt: int = Field(ge=1)
+    violations: list[str] = Field(default_factory=list)
+    proposed_prompt: str = ""
+    diff_summary: str = ""
+    rationale: str = ""
+
+
 class IterationMemory(BaseModel):
     version: int
     prompt_hash: str
@@ -274,6 +304,7 @@ class IterationMemory(BaseModel):
     proposed_change: str | None = None
     diff_summary: str | None = None
     failure_pattern: str | None = None
+    rejected_refinement_reason: str | None = None
 
 
 class Iteration(BaseModel):
@@ -284,6 +315,8 @@ class Iteration(BaseModel):
     refinement_rationale: str | None = None
     diagnosis: Diagnosis | None = None
     diff_summary: str | None = None
+    refinement_rejected_reason: str | None = None
+    refinement_repair_attempts: list[RefinementRepairAttempt] = Field(default_factory=list)
     objective_score: float | None = None
     pareto_dominated: bool = False
     timestamp_started: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -304,6 +337,7 @@ class OptimizationConfig(BaseModel):
     parallelism: int = 4
     n_runs_per_case: int = 1
     max_failures_for_refinement: int = 10
+    max_refinement_repair_attempts: int = Field(default=5, ge=1)
     instability_std_threshold_ms: float = 250.0
     use_gabarito_split: bool = False
     train_ratio: float = 0.7
@@ -325,7 +359,9 @@ class OptimizationConfig(BaseModel):
 
 class OptimizationRun(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
+    run_mode: RunMode = "optimize"
     config: OptimizationConfig
+    task_contract: TaskContract | None = None
     gabarito_hash: str
     initial_prompt_hash: str
     iterations: list[Iteration] = Field(default_factory=list)

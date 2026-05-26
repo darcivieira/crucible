@@ -44,6 +44,43 @@ def test_api_lists_and_reads_runs(tmp_path):
     assert report.status_code == 200
 
 
+def test_api_can_create_validate_run(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    client = TestClient(create_api_app(store))
+    request = {
+        "mode": "validate",
+        "prompt": Prompt(template="{input}", variables=["input"]).model_dump(mode="json"),
+        "gabarito": Gabarito(
+            name="sample",
+            version="v1",
+            cases=[
+                CrucibleTestCase(
+                    id="case",
+                    input="ok",
+                    expected_output="ok",
+                    assertion=Contains(),
+                )
+            ],
+        ).model_dump(mode="json"),
+        "config": OptimizationConfig(
+            threshold=100,
+            max_iterations=1,
+            target_model=ModelSpec(provider="fake", model_id="target", role="target"),
+            reasoning_model=ModelSpec(provider="fake", model_id="reasoning", role="reasoning"),
+        ).model_dump(mode="json"),
+    }
+
+    created = client.post("/runs", json=request)
+
+    assert created.status_code == 200
+    task = client.get(f"/tasks/{created.json()['task_id']}").json()
+    assert task["status"] == "completed"
+    run = client.get(f"/runs/{task['run_id']}").json()
+    assert run["run_mode"] == "validate"
+    assert run["stop_reason"] == "validation_only"
+    assert len(run["iterations"]) == 1
+
+
 def test_api_persists_task_state_and_accepts_cancel(tmp_path):
     db = tmp_path / "runs.sqlite"
     store = SQLiteRunStore(db)

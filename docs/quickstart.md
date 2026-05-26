@@ -139,6 +139,12 @@ Abra:
 http://127.0.0.1:7777
 ```
 
+Na tela inicial você pode abrir `Nova run` para executar pelo navegador.
+
+Use `Validate` quando quiser medir rapidamente o prompt atual. Use `Optimize` quando
+quiser que o Crucible proponha versões melhores. A tela aceita caminhos locais para
+`prompt.txt`, `gabarito.yaml` e `config.yaml`, ou conteúdo colado nos editores.
+
 ## Exportar Artefatos
 
 ```bash

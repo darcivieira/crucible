@@ -26,6 +26,7 @@ Body:
 
 ```json
 {
+  "mode": "optimize",
   "prompt": {
     "template": "Responda: {input}",
     "variables": ["input"],
@@ -62,6 +63,12 @@ Body:
   }
 }
 ```
+
+`mode` é opcional. Valores aceitos:
+
+- `optimize`: executa o loop de otimização e cria uma run normal.
+- `validate`: executa apenas a versão atual do prompt e persiste uma run com uma
+  iteração, `run_mode="validate"` e `stop_reason="validation_only"`.
 
 Resposta:
 

@@ -77,11 +77,26 @@ O comando:
 
 1. executa o prompt inicial;
 2. calcula score e métricas operacionais;
-3. seleciona falhas relevantes;
-4. pede um diagnóstico ao `reasoning_model`;
-5. pede uma proposta de novo prompt;
-6. executa a nova versão contra o gabarito;
-7. repete até algum critério de parada.
+3. constrói um contrato da tarefa a partir do prompt inicial, config e gabarito;
+4. seleciona falhas relevantes;
+5. pede um diagnóstico ao `reasoning_model`;
+6. pede uma proposta de novo prompt;
+7. valida a proposta contra o contrato da tarefa;
+8. se a proposta violar o contrato, pede reparos ao `reasoning_model` sem executar
+   o target de novo;
+9. executa a nova versão contra o gabarito somente quando o refino é válido;
+10. repete até algum critério de parada.
+
+O contrato da tarefa protege requisitos que não devem mudar durante a otimização.
+Exemplo: se o prompt ou o gabarito indicam que um campo deve conter o trecho literal
+que justifica uma classificação, o refino não pode trocar isso por uma justificativa
+inferida como "o texto contém prazo". Nesses casos, o gabarito é usado como fonte da
+verdade quando o prompt inicial é omisso.
+
+Se o `reasoning_model` gerar um prompt inválido, o Crucible não cria uma nova
+iteração com o mesmo prompt. Ele envia as violações de volta ao reasoning e pede uma
+nova proposta, até `max_refinement_repair_attempts`. Se nenhuma tentativa produzir
+um prompt válido, a run encerra com `reasoning_failed_to_refine`.
 
 Critérios de parada:
 
@@ -91,7 +106,9 @@ Critérios de parada:
 - `time_exhausted`: tempo máximo atingido;
 - `plateau`: score parou de melhorar;
 - `no_failures`: não há falhas para refinar;
-- `cancelled`: task cancelada pela API.
+- `cancelled`: task cancelada pela API;
+- `reasoning_failed_to_refine`: o modelo reasoning não conseguiu gerar uma proposta
+  de prompt que preservasse o contrato da tarefa.
 
 Ao terminar, a run fica salva em `.crucible/` e o melhor prompt pode ser visto com
 `show-run`, `report`, `diff`, `export` ou pelo dashboard.

@@ -21,12 +21,16 @@ Workflows:
 - `.github/workflows/ci.yml`: testes, lint, build Python e pacote VSIX em PR/push.
 - `.github/workflows/publish-python.yml`: publica no PyPI em release publicada.
 - `.github/workflows/publish-vscode.yml`: publica a extensão em release publicada.
+- `.github/workflows/publish-docker.yml`: publica imagem Docker no Docker Hub em
+  release/tag versionada ou execução manual.
 
 Segredos/ambiente esperados:
 
 - PyPI: Trusted Publishing/OIDC configurado para o environment `pypi`.
 - VSCode Marketplace: `VSCE_PAT`.
 - Open VSX: `OVSX_PAT`.
+- Docker Hub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` e, opcionalmente,
+  variável de repositório `DOCKERHUB_REPOSITORY`.
 
 ## Checklist
 

@@ -121,6 +121,7 @@ Comece por aqui:
 - [SDK Python](docs/sdk.md)
 - [Dashboard](docs/dashboard.md)
 - [REST API](docs/api.md)
+- [Docker](docs/docker.md)
 - [Plugins](docs/plugins.md)
 - [Importadores e Exports](docs/importers-and-exports.md)
 - [Operação](docs/operations.md)

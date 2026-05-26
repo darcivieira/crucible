@@ -1,5 +1,6 @@
 from crucible.modules.optimizer.domain.models import (
     CompletionResult,
+    ContractRule,
     CostEstimate,
     ExecutionResult,
     Gabarito,
@@ -10,13 +11,16 @@ from crucible.modules.optimizer.domain.models import (
     OptimizationRun,
     Prompt,
     ProviderRateLimit,
+    RefinementRepairAttempt,
     ScoreReport,
+    TaskContract,
     TestCase,
     Verdict,
 )
 
 __all__ = [
     "CompletionResult",
+    "ContractRule",
     "CostEstimate",
     "ExecutionResult",
     "Gabarito",
@@ -27,7 +31,9 @@ __all__ = [
     "OptimizationRun",
     "Prompt",
     "ProviderRateLimit",
+    "RefinementRepairAttempt",
     "ScoreReport",
+    "TaskContract",
     "TestCase",
     "Verdict",
 ]

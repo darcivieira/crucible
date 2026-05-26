@@ -59,7 +59,7 @@ Use o SDK para:
 
 ## Dashboard
 
-O dashboard é read-only sobre SQLite.
+O dashboard roda sobre SQLite e também inicia tasks locais.
 
 ```bash
 uv run crucible serve
@@ -68,6 +68,8 @@ uv run crucible serve
 Use para:
 
 - navegar runs;
+- criar runs `validate` e `optimize`;
+- acompanhar tasks e cancelamento;
 - comparar iterações;
 - ver best prompt;
 - identificar regressões;

@@ -14,6 +14,7 @@ plateau_min_delta: 0.5
 parallelism: 4
 n_runs_per_case: 1
 max_failures_for_refinement: 10
+max_refinement_repair_attempts: 5
 instability_std_threshold_ms: 250.0
 
 use_gabarito_split: false
@@ -78,9 +79,38 @@ embedding_model: null
 | `parallelism` | Concorrência global por caso dentro de uma iteração. |
 | `n_runs_per_case` | Repete cada caso e escolhe o output majoritário. |
 | `max_failures_for_refinement` | Limite de falhas enviadas ao refiner. |
+| `max_refinement_repair_attempts` | Quantidade máxima de propostas que o `reasoning_model` pode tentar gerar para a mesma iteração antes da run parar com `reasoning_failed_to_refine`. Inclui a proposta inicial e os reparos. |
 | `instability_std_threshold_ms` | Desvio de latência usado para marcar instabilidade. |
 | `selection_strategy` | `quality` ou `multi_objective`. |
 | `active_learning_suggestions` | Quantidade de sugestões de novos casos ao final da run. |
+
+## Reparo De Refino
+
+Durante `optimize`, o `reasoning_model` não tem liberdade para mudar o contrato da
+tarefa. Depois de avaliar uma iteração, o Crucible pede uma proposta de novo prompt
+e valida essa proposta contra o contrato inferido do prompt inicial, `config.yaml` e
+gabarito.
+
+Se a proposta violar o contrato, o Crucible não executa o `target_model` de novo com
+o mesmo prompt. Em vez disso, ele abre um subloop de reparo: envia ao
+`reasoning_model` a proposta rejeitada, as violações concretas e o contrato que deve
+ser preservado. Isso evita gastar chamadas de target em iterações repetidas.
+
+```yaml
+max_refinement_repair_attempts: 5
+```
+
+Esse limite conta o total de propostas para uma mesma tentativa de refino: a proposta
+inicial mais os reparos. Com `5`, o reasoning tem até cinco chances de produzir um
+`new_prompt` válido. Se todas falharem, a run termina com:
+
+```text
+stop_reason: reasoning_failed_to_refine
+```
+
+Use esse sinal para revisar o modelo reasoning, o prompt inicial ou o gabarito. Ele
+normalmente aparece quando o reasoning insiste em remover uma regra crítica, trocar
+extração literal por explicação inferida, omitir `{input}` ou repetir o mesmo prompt.
 
 ## Threshold Global E Métricas Por Campo
 

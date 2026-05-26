@@ -21,9 +21,44 @@ Por padrão, a imagem executa:
 crucible serve --host 0.0.0.0 --port 7777
 ```
 
-## Docker Compose
+## Docker Compose Para Uso Normal
 
-Suba dashboard e API:
+Use o compose runtime para puxar a imagem publicada no Docker Hub:
+
+```bash
+docker compose -f docker-compose.runtime.yml pull
+docker compose -f docker-compose.runtime.yml up -d
+```
+
+Por padrão ele usa:
+
+```text
+darcivieirajr/crucible:latest
+```
+
+URLs padrão:
+
+- Dashboard: `http://127.0.0.1:7777`
+- API: `http://127.0.0.1:7788`
+
+O estado fica no volume nomeado `crucible-data`. Arquivos de trabalho ficam em
+`./workspace`, montado dentro do container em `/workspace`. Coloque ali prompts,
+gabaritos, configs e, quando necessário, um arquivo `.env`.
+
+Exemplo:
+
+```text
+workspace/
+  .env
+  prompt.txt
+  gabarito.yaml
+  config.yaml
+```
+
+## Docker Compose Para Desenvolvimento
+
+O arquivo `docker-compose.yml` é voltado a desenvolvimento local: ele faz build da
+imagem a partir do código atual e monta a raiz do repositório como `/workspace`.
 
 ```bash
 docker compose up --build
@@ -34,13 +69,14 @@ URLs padrão:
 - Dashboard: `http://127.0.0.1:7777`
 - API: `http://127.0.0.1:7788`
 
-O compose usa um volume nomeado `crucible-data` para persistir SQLite, reports, runs
-e cache em `/data`. O diretório do projeto também é montado em `/workspace`, então
-arquivos locais como `prompt.txt`, `gabarito.yaml`, `config.yaml` e `.env` ficam
-disponíveis dentro do container.
+O compose de desenvolvimento também usa o volume nomeado `crucible-data` para
+persistir SQLite, reports, runs e cache em `/data`.
 
-Para usar providers externos, mantenha as variáveis no `.env` local ou passe `-e` no
-`docker run`. Exemplos:
+Para usar providers externos no compose runtime, mantenha as variáveis em
+`workspace/.env`. O Crucible lê esse arquivo dentro do container, sem o Docker
+Compose precisar expandir e imprimir secrets em `docker compose config`.
+
+Exemplos:
 
 ```env
 CRUCIBLE_OPENAI_API_KEY=...

@@ -26,3 +26,5 @@ vscode-extension/*.vsix
 .env
 .idea
 .publicacao
+workspace/*
+!workspace/.gitkeep

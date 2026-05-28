@@ -31,6 +31,7 @@ rate_limit:
   retry_attempts: 2
   retry_backoff_seconds: 0.5
 cost_per_million_input_tokens_usd: 0.0
+cost_per_million_cached_input_tokens_usd: 0.0
 cost_per_million_output_tokens_usd: 0.0
 ```
 
@@ -120,6 +121,35 @@ target_model:
 Nesse modo, o adapter envia o schema em `text.format`. Em `api_mode:
 chat_completions`, ele envia em `response_format`.
 
+### Prompt Caching Na OpenAI
+
+Quando `provider_cache.enabled` está ativo, o adapter OpenAI recebe parâmetros extras
+para instrumentar prompt caching:
+
+```yaml
+provider_cache:
+  enabled: true
+  openai_retention: 24h
+```
+
+A OpenAI não expõe, nesse fluxo, um `cache_id` manual como o Google. O cache é
+automático do provider. O Crucible envia `prompt_cache_key` e, quando configurado,
+`prompt_cache_retention: 24h` em `params.extra`; depois registra
+`cached_tokens_in` se a resposta trouxer tokens cacheados no bloco de usage.
+
+Use `cost_per_million_cached_input_tokens_usd` para que o relatório calcule custo
+com a tarifa de input cacheado:
+
+```yaml
+target_model:
+  provider: openai
+  model_id: gpt-5-mini
+  role: target
+  cost_per_million_input_tokens_usd: 0.25
+  cost_per_million_cached_input_tokens_usd: 0.025
+  cost_per_million_output_tokens_usd: 2.00
+```
+
 OpenRouter:
 
 ```bash
@@ -173,6 +203,37 @@ reasoning_model:
   model_id: gemini-2.5-pro
   role: reasoning
 ```
+
+### Context Cache No Gemini
+
+O Google/Gemini tem cache explícito. Com `provider_cache.enabled`, o Crucible cria um
+`cachedContents` por `case.input` antes da iteração e passa esse cache nas chamadas
+do target.
+
+```yaml
+provider_cache:
+  enabled: true
+  ttl_seconds: 3600
+  cache_inputs: true
+  on_error: fallback
+
+target_model:
+  provider: google
+  model_id: gemini-2.0-flash
+  role: target
+  cost_per_million_input_tokens_usd: 0.10
+  cost_per_million_cached_input_tokens_usd: 0.025
+  cost_per_million_output_tokens_usd: 0.40
+```
+
+Na execução, o prompt enviado ao modelo substitui `{input}` por uma indicação de que
+o conteúdo está no contexto cacheado do provider. O input real fica no cache remoto.
+A run registra `provider_cache_id` por verdict e `cached_tokens` quando o Google
+retorna `cachedContentTokenCount`.
+
+Use `on_error: fail` quando cache é obrigatório para custo ou limite de contexto. Use
+`on_error: fallback` quando você prefere concluir a run mesmo que o provider negue o
+cache, por exemplo por permissão, billing ou modelo incompatível.
 
 ## llama.cpp
 

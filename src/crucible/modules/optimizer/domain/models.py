@@ -30,7 +30,9 @@ SelectionStrategy = Literal["quality", "multi_objective"]
 ModelApiMode = Literal["chat_completions", "responses"]
 OutputFormatType = Literal["text", "json_object", "json_schema"]
 RunStatus = Literal["running", "completed", "failed", "aborted"]
-RunMode = Literal["validate", "optimize"]
+RunMode = Literal["validate", "optimize", "compare"]
+ProviderCacheOnError = Literal["fail", "fallback"]
+OpenAIPromptCacheRetention = Literal["in_memory", "24h"]
 TaskContractSource = Literal["prompt", "config", "gabarito", "heuristic"]
 StopReason = Literal[
     "threshold_reached",
@@ -42,6 +44,7 @@ StopReason = Literal[
     "cancelled",
     "validation_only",
     "reasoning_failed_to_refine",
+    "comparison_completed",
 ]
 
 
@@ -184,6 +187,7 @@ class ModelSpec(BaseModel):
     output_format: ModelOutputFormat = Field(default_factory=ModelOutputFormat)
     rate_limit: ProviderRateLimit = Field(default_factory=ProviderRateLimit)
     cost_per_million_input_tokens_usd: float = 0.0
+    cost_per_million_cached_input_tokens_usd: float = 0.0
     cost_per_million_output_tokens_usd: float = 0.0
     context_window: int = 8192
     supports_json_mode: bool = False
@@ -193,6 +197,7 @@ class ModelSpec(BaseModel):
 class CompletionResult(BaseModel):
     text: str
     tokens_in: int = 0
+    cached_tokens_in: int = 0
     tokens_out: int = 0
     finish_reason: str = "stop"
     raw: dict[str, Any] = Field(default_factory=dict)
@@ -203,8 +208,10 @@ class ExecutionResult(BaseModel):
     actual_output: str
     latency_ms: float
     tokens_in: int = 0
+    cached_tokens_in: int = 0
     tokens_out: int = 0
     cost_usd: float = 0.0
+    provider_cache_id: str | None = None
     finish_reason: str = "stop"
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     error: str | None = None
@@ -224,6 +231,7 @@ class OperationalMetrics(BaseModel):
     p50_latency_ms: float = 0.0
     p95_latency_ms: float = 0.0
     total_tokens: int = 0
+    cached_tokens: int = 0
 
 
 class ScoreReport(BaseModel):
@@ -297,6 +305,41 @@ class RefinementRepairAttempt(BaseModel):
     rationale: str = ""
 
 
+class ProviderCacheConfig(BaseModel):
+    enabled: bool = False
+    ttl_seconds: int = Field(default=3600, gt=0)
+    cache_inputs: bool = True
+    on_error: ProviderCacheOnError = "fail"
+    openai_retention: OpenAIPromptCacheRetention = "in_memory"
+
+
+class ComparisonTarget(BaseModel):
+    label: str
+    model: ModelSpec
+
+
+class ComparisonWinner(BaseModel):
+    label: str | None = None
+    score: float = 0.0
+    cost_usd: float = 0.0
+    latency_ms: float = 0.0
+    value_score: float = 0.0
+
+
+class ComparisonCaseWinner(BaseModel):
+    test_case_id: str
+    best_score: str | None = None
+    lowest_cost: str | None = None
+    best_value: str | None = None
+
+
+class ComparisonSummary(BaseModel):
+    best_score: ComparisonWinner = Field(default_factory=ComparisonWinner)
+    lowest_cost: ComparisonWinner = Field(default_factory=ComparisonWinner)
+    best_value: ComparisonWinner = Field(default_factory=ComparisonWinner)
+    case_winners: list[ComparisonCaseWinner] = Field(default_factory=list)
+
+
 class IterationMemory(BaseModel):
     version: int
     prompt_hash: str
@@ -312,6 +355,8 @@ class Iteration(BaseModel):
     prompt: Prompt
     verdicts: list[Verdict]
     score_report: ScoreReport
+    comparison_label: str | None = None
+    target_model: ModelSpec | None = None
     refinement_rationale: str | None = None
     diagnosis: Diagnosis | None = None
     diff_summary: str | None = None
@@ -349,9 +394,14 @@ class OptimizationConfig(BaseModel):
     objective_cost_weight: float = Field(default=0.0, ge=0.0)
     objective_latency_weight: float = Field(default=0.0, ge=0.0)
     active_learning_suggestions: int = Field(default=0, ge=0)
+    provider_cache: ProviderCacheConfig = Field(default_factory=ProviderCacheConfig)
+    comparison_models: list[ComparisonTarget] = Field(default_factory=list)
+    comparison_value_quality_weight: float = Field(default=0.8, ge=0.0)
+    comparison_value_cost_weight: float = Field(default=0.2, ge=0.0)
+    comparison_value_latency_weight: float = Field(default=0.0, ge=0.0)
 
-    target_model: ModelSpec
-    reasoning_model: ModelSpec
+    target_model: ModelSpec | None = None
+    reasoning_model: ModelSpec | None = None
     judge_model: ModelSpec | None = None
     judge_models: list[ModelSpec] = Field(default_factory=list)
     embedding_model: ModelSpec | None = None
@@ -368,6 +418,8 @@ class OptimizationRun(BaseModel):
     status: RunStatus = "running"
     stop_reason: StopReason | None = None
     validation_scores: dict[str, float] = Field(default_factory=dict)
+    comparison_summary: ComparisonSummary | None = None
+    provider_cache_warnings: list[str] = Field(default_factory=list)
     pareto_frontier_versions: list[int] = Field(default_factory=list)
     active_learning_suggestions: list[ActiveLearningSuggestion] = Field(default_factory=list)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

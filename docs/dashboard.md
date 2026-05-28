@@ -24,6 +24,7 @@ Use a UI quando quiser:
 
 - rodar `validate` sem sair do navegador;
 - iniciar `optimize` com arquivos locais ou conteúdo colado;
+- comparar modelos alvo com o mesmo prompt e gabarito;
 - acompanhar status/cancelamento de tasks;
 - entender por que uma run parou;
 - filtrar verdicts por falha, regressão, tag, assertion e score;
@@ -57,7 +58,7 @@ http://127.0.0.1:7777/?status=completed&target=ollama&min_score=80
 
 Mostra:
 
-- modo da run (`Validate` ou `Optimize`);
+- modo da run (`Validate`, `Optimize` ou `Compare`);
 - status;
 - motivo de parada com descrição mais legível;
 - melhor score;
@@ -72,6 +73,14 @@ Mostra:
 - worst cases e tags mais fracas;
 - tabela de iterações;
 - melhor prompt.
+
+Em runs de comparação, a tela também mostra um bloco `Comparação de modelos` com:
+
+- vencedor por melhor score;
+- vencedor por menor custo;
+- vencedor por melhor custo-benefício;
+- score, pass rate, custo, p95 e tokens cacheados por modelo;
+- vencedor por caso.
 
 Use essa tela para responder rapidamente:
 
@@ -97,13 +106,14 @@ O formulário aceita dois modos:
 
 - `Validate`: mede o prompt atual e persiste o resultado como run de uma iteração.
 - `Optimize`: executa o loop de otimização normal.
+- `Compare`: executa uma iteração por item em `comparison_models`.
 
 Para `prompt`, `gabarito` e `config`, a tela aceita caminho local ou conteúdo colado.
 Se o conteúdo estiver preenchido, ele vence o caminho informado.
 
 O campo `config` é um editor YAML completo. Ele cobre parâmetros como modelos,
 budgets, threshold, `output_format`, split train/val/test, rate limits,
-judge/embedding e multi-objective.
+judge/embedding, cache de provider, comparação de modelos e multi-objective.
 
 ### `/tasks/{task_id}`
 

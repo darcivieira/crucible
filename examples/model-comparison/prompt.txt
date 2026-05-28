@@ -1,0 +1,10 @@
+Extraia uma classificacao juridica do texto.
+
+Responda apenas JSON valido com as chaves:
+- classification: uma das opcoes ["Prazo", "Intimacao", "Outro"]
+- text_validation: trecho literal do texto que justifica a classificacao
+
+Nao invente justificativa. Se nao houver trecho literal, use string vazia.
+
+Texto:
+{input}

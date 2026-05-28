@@ -69,6 +69,11 @@ Body:
 - `optimize`: executa o loop de otimização e cria uma run normal.
 - `validate`: executa apenas a versão atual do prompt e persiste uma run com uma
   iteração, `run_mode="validate"` e `stop_reason="validation_only"`.
+- `compare`: executa uma iteração por item de `comparison_models`.
+
+Para `validate`, `optimize` e `estimate-cost`, `config.target_model` e
+`config.reasoning_model` são obrigatórios. Para `compare`, eles podem ficar ausentes;
+nesse caso, informe apenas `comparison_models`.
 
 Resposta:
 

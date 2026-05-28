@@ -22,6 +22,19 @@ iteration = await optimizer.validate(prompt, gabarito)
 print(iteration.score)
 ```
 
+## Comparar Modelos
+
+```python
+run = await optimizer.compare_models(prompt, gabarito)
+print(run.comparison_summary.best_score.label)
+print(run.comparison_summary.lowest_cost.label)
+print(run.comparison_summary.best_value.label)
+```
+
+Use quando o `config.comparison_models` já contém os targets candidatos e você quer
+uma avaliação única, sem refino, para decidir qual modelo vale promover.
+Nesse fluxo, `target_model` e `reasoning_model` podem ficar ausentes do config.
+
 ## Estimar Custo
 
 ```python

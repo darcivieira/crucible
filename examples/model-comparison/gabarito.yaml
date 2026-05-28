@@ -1,0 +1,34 @@
+name: model-comparison
+version: v1
+description: Compara targets para extracao estruturada com pesos por campo.
+cases:
+  - id: prazo-001
+    input: "Fica a parte autora intimada para manifestar-se no prazo de 5 dias."
+    expected_output: |
+      {"classification": "Prazo", "text_validation": "prazo de 5 dias"}
+    assertion:
+      type: field_by_field
+      weights:
+        classification: 95
+        text_validation: 5
+    tags: [prazo]
+  - id: intimacao-001
+    input: "Intime-se o requerido acerca da decisao de fls. 23."
+    expected_output: |
+      {"classification": "Intimacao", "text_validation": "Intime-se o requerido"}
+    assertion:
+      type: field_by_field
+      weights:
+        classification: 95
+        text_validation: 5
+    tags: [intimacao]
+  - id: outro-001
+    input: "Certifico que os autos foram conclusos para despacho."
+    expected_output: |
+      {"classification": "Outro", "text_validation": ""}
+    assertion:
+      type: field_by_field
+      weights:
+        classification: 95
+        text_validation: 5
+    tags: [outro]

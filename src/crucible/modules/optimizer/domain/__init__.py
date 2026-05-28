@@ -1,4 +1,6 @@
 from crucible.modules.optimizer.domain.models import (
+    ComparisonSummary,
+    ComparisonTarget,
     CompletionResult,
     ContractRule,
     CostEstimate,
@@ -10,6 +12,7 @@ from crucible.modules.optimizer.domain.models import (
     OptimizationConfig,
     OptimizationRun,
     Prompt,
+    ProviderCacheConfig,
     ProviderRateLimit,
     RefinementRepairAttempt,
     ScoreReport,
@@ -20,6 +23,8 @@ from crucible.modules.optimizer.domain.models import (
 
 __all__ = [
     "CompletionResult",
+    "ComparisonSummary",
+    "ComparisonTarget",
     "ContractRule",
     "CostEstimate",
     "ExecutionResult",
@@ -30,6 +35,7 @@ __all__ = [
     "OptimizationConfig",
     "OptimizationRun",
     "Prompt",
+    "ProviderCacheConfig",
     "ProviderRateLimit",
     "RefinementRepairAttempt",
     "ScoreReport",

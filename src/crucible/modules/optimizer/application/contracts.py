@@ -9,6 +9,7 @@ from typing import Any
 from crucible.modules.optimizer.domain.models import (
     ContractRule,
     Gabarito,
+    ModelSpec,
     OptimizationConfig,
     Prompt,
     RefinementProposal,
@@ -69,7 +70,8 @@ def build_task_contract(
     config: OptimizationConfig,
 ) -> TaskContract:
     prompt_text = prompt.template.strip()
-    output_schema = config.target_model.output_format.schema_
+    target_model = _contract_target_model(config)
+    output_schema = target_model.output_format.schema_ if target_model else {}
     output_contract = _output_contract(config)
     parsed_expected = [_parse_expected(case.expected_output) for case in gabarito.cases[:50]]
     expected_objects = [value for value in parsed_expected if isinstance(value, dict)]
@@ -184,7 +186,10 @@ def validate_refinement_against_contract(
 
 
 def _output_contract(config: OptimizationConfig) -> dict[str, Any]:
-    output_format = config.target_model.output_format
+    target_model = _contract_target_model(config)
+    if target_model is None:
+        return {"type": "text", "name": "", "required": [], "fields": [], "enums": {}}
+    output_format = target_model.output_format
     schema = output_format.schema_
     fields = _fields_from_schema(schema)
     return {
@@ -198,6 +203,14 @@ def _output_contract(config: OptimizationConfig) -> dict[str, Any]:
             if isinstance(spec, dict) and spec.get("enum")
         },
     }
+
+
+def _contract_target_model(config: OptimizationConfig) -> ModelSpec | None:
+    if config.target_model is not None:
+        return config.target_model
+    if config.comparison_models:
+        return config.comparison_models[0].model
+    return None
 
 
 def _fields_from_schema(schema: dict[str, Any]) -> list[str]:

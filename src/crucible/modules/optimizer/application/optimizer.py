@@ -6,6 +6,7 @@ import json
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from statistics import mean, pstdev
 from time import perf_counter
@@ -33,6 +34,9 @@ from crucible.modules.optimizer.application.multi_objective import update_multi_
 from crucible.modules.optimizer.application.reports import write_report
 from crucible.modules.optimizer.domain.assertions import AssertionContext
 from crucible.modules.optimizer.domain.models import (
+    ComparisonCaseWinner,
+    ComparisonSummary,
+    ComparisonWinner,
     CompletionResult,
     Diagnosis,
     ExecutionResult,
@@ -78,23 +82,44 @@ class Optimizer:
         self.execution_backend = execution_backend(
             config.execution_backend, config.distributed_workers
         )
-        self.target_provider = target_provider or self.provider_factory.get(config.target_model)
-        self.reasoning_provider = reasoning_provider or self.provider_factory.get(
-            config.reasoning_model
+        self.target_provider = (
+            target_provider
+            or (
+                self.provider_factory.get(config.target_model)
+                if config.target_model is not None
+                else None
+            )
         )
-        self.judge_specs = config.judge_models or [config.judge_model or config.reasoning_model]
+        self.reasoning_provider = (
+            reasoning_provider
+            or (
+                self.provider_factory.get(config.reasoning_model)
+                if config.reasoning_model is not None
+                else None
+            )
+        )
+        self.judge_specs = _judge_specs(config)
         self.judge_providers = judge_providers or [
             self.provider_factory.get(spec) for spec in self.judge_specs
         ]
-        self.judge_provider = judge_provider or self.judge_providers[0]
+        self.judge_provider = judge_provider or (
+            self.judge_providers[0] if self.judge_providers else None
+        )
         self.embedding_provider = (
             self.provider_factory.get_embedding(config.embedding_model)
             if config.embedding_model is not None
             else None
         )
         self.should_cancel = should_cancel
+        self._provider_context_cache: dict[str, str] = {}
+        self._provider_cache_warnings: list[str] = []
+
+    @property
+    def provider_cache_warnings(self) -> list[str]:
+        return list(self._provider_cache_warnings)
 
     async def validate(self, prompt: Prompt, gabarito: Gabarito) -> Iteration:
+        self._require_validate_dependencies("validate")
         return await self._run_iteration(
             version=0,
             prompt=prompt,
@@ -104,7 +129,48 @@ class Optimizer:
             proposal=None,
         )
 
+    async def compare_models(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
+        if not self.config.comparison_models:
+            raise ValueError("comparison_models must contain at least one model")
+        started_at = datetime.now(UTC)
+        run = OptimizationRun(
+            run_mode="compare",
+            config=self.config,
+            task_contract=build_task_contract(prompt, gabarito, self.config),
+            gabarito_hash=gabarito.content_hash,
+            initial_prompt_hash=prompt.content_hash,
+            started_at=started_at,
+        )
+        original_model = self.config.target_model
+        original_provider = self.target_provider
+        try:
+            for index, target in enumerate(self.config.comparison_models):
+                self.config.target_model = target.model
+                self.target_provider = self.provider_factory.get(target.model)
+                iteration = await self._run_iteration(
+                    version=index,
+                    prompt=prompt,
+                    gabarito=gabarito,
+                    previous_verdicts=None,
+                    diagnosis=None,
+                    proposal=None,
+                )
+                iteration.comparison_label = target.label
+                iteration.target_model = target.model
+                run.iterations.append(iteration)
+        finally:
+            self.config.target_model = original_model
+            self.target_provider = original_provider
+        run.comparison_summary = comparison_summary(run, self.config)
+        run.status = "completed"
+        run.stop_reason = "comparison_completed"
+        run.provider_cache_warnings = self.provider_cache_warnings
+        run.ended_at = datetime.now(UTC)
+        await self.store.save_run(run)
+        return run
+
     def estimate_cost(self, prompt: Prompt, gabarito: Gabarito):
+        self._require_validate_dependencies("estimate-cost")
         return estimate_cost(prompt, gabarito, self.config)
 
     async def load_run(self, run_id: str) -> OptimizationRun:
@@ -118,6 +184,7 @@ class Optimizer:
         return write_report(run, reports_dir or settings.reports_dir, format)
 
     async def optimize(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
+        self._require_validate_dependencies("optimize")
         if self.config.use_gabarito_split:
             train_set, val_set, test_set = gabarito.split(
                 train=self.config.train_ratio,
@@ -182,6 +249,7 @@ class Optimizer:
                 await self.store.save_run(run)
                 return run
             run.iterations.append(iteration)
+            run.provider_cache_warnings = self.provider_cache_warnings
             update_multi_objective(run)
             await self.store.save_iteration(run)
 
@@ -264,6 +332,7 @@ class Optimizer:
         started = datetime.now(UTC)
         previous_by_case = {v.test_case.id: v for v in previous_verdicts or []}
         semaphore = asyncio.Semaphore(self.config.parallelism)
+        await self._prepare_provider_contexts(gabarito)
 
         async def run_case(test_case: TestCase) -> Verdict:
             async with semaphore:
@@ -286,6 +355,7 @@ class Optimizer:
             prompt=prompt,
             verdicts=verdicts,
             score_report=aggregate_score(verdicts),
+            target_model=_require_target_model(self.config, "iteration"),
             refinement_rationale=proposal.rationale if proposal else None,
             diagnosis=diagnosis,
             diff_summary=proposal.diff_summary if proposal else None,
@@ -299,10 +369,16 @@ class Optimizer:
         test_case: TestCase,
         previous_by_case: dict[str, Verdict],
     ) -> Verdict:
-        rendered = prompt.render(input_text=test_case.input)
+        provider_cache_id = await self._provider_cache_id(test_case)
+        rendered_input = (
+            "The case input is available in the provider cached content for this request."
+            if provider_cache_id
+            else test_case.input
+        )
+        rendered = prompt.render(input_text=rendered_input)
         runs = await asyncio.gather(
             *(
-                self._cached_call_target(prompt, test_case, rendered, run_index)
+                self._cached_call_target(prompt, test_case, rendered, run_index, provider_cache_id)
                 for run_index in range(self.config.n_runs_per_case)
             )
         )
@@ -311,15 +387,16 @@ class Optimizer:
             runs,
             instability_std_threshold_ms=self.config.instability_std_threshold_ms,
         )
+        target_model = _require_target_model(self.config, "iteration")
 
         context = AssertionContext(
             judge_provider=self.judge_provider,
             judge_providers=self.judge_providers,
             embedding_provider=self.embedding_provider,
-            judge_params=(self.config.judge_model or self.config.reasoning_model).params,
+            judge_params=(self.judge_specs[0].params if self.judge_specs else None),
             judge_params_list=[spec.params for spec in self.judge_specs],
-            target_output_format_type=self.config.target_model.output_format.type,
-            target_output_schema=self.config.target_model.output_format.schema_,
+            target_output_format_type=target_model.output_format.type,
+            target_output_schema=target_model.output_format.schema_,
         )
         assertion = await test_case.assertion.evaluate(
             test_case.expected_output,
@@ -345,25 +422,45 @@ class Optimizer:
         test_case: TestCase,
         rendered: str,
         run_index: int,
+        provider_cache_id: str | None,
     ) -> ExecutionResult:
         cache_input = (
             test_case.input
             if self.config.n_runs_per_case == 1
             else f"{test_case.input}\n\n__crucible_run_index__={run_index}"
         )
-        cache_key = execution_cache_key(prompt, cache_input, self.config.target_model)
+        target_model = _require_target_model(self.config, "execution")
+        cache_key = execution_cache_key(prompt, cache_input, target_model)
         execution = await self.cache.get(cache_key)
         if execution is None:
-            execution = await self._call_target(rendered, test_case.id)
+            execution = await self._call_target(rendered, test_case.id, provider_cache_id)
             await self.cache.set(cache_key, execution)
         return execution
 
-    async def _call_target(self, rendered_prompt: str, test_case_id: str) -> ExecutionResult:
+    async def _call_target(
+        self,
+        rendered_prompt: str,
+        test_case_id: str,
+        provider_cache_id: str | None = None,
+    ) -> ExecutionResult:
         started = perf_counter()
+        target_model = _require_target_model(self.config, "execution")
+        target_provider = _require_provider(self.target_provider, "target", "execution")
         try:
-            result = await self.target_provider.complete(
-                rendered_prompt, self.config.target_model.params
+            params = _params_with_provider_cache(
+                rendered_prompt,
+                target_model,
+                self.config,
             )
+            if provider_cache_id and hasattr(target_provider, "complete_with_cached_context"):
+                provider: Any = target_provider
+                result = await provider.complete_with_cached_context(
+                    rendered_prompt,
+                    params,
+                    provider_cache_id,
+                )
+            else:
+                result = await target_provider.complete(rendered_prompt, params)
             error = None
         except Exception as exc:
             result = CompletionResult(text="", finish_reason="error")
@@ -374,11 +471,55 @@ class Optimizer:
             actual_output=result.text,
             latency_ms=latency_ms,
             tokens_in=result.tokens_in,
+            cached_tokens_in=result.cached_tokens_in,
             tokens_out=result.tokens_out,
-            cost_usd=_cost_usd(result, self.config.target_model),
+            cost_usd=_cost_usd(result, target_model),
+            provider_cache_id=provider_cache_id,
             finish_reason=result.finish_reason,
             error=error,
         )
+
+    async def _provider_cache_id(self, test_case: TestCase) -> str | None:
+        cache_config = self.config.provider_cache
+        model = self.config.target_model
+        if not cache_config.enabled or not cache_config.cache_inputs:
+            return None
+        if model is None:
+            return None
+        if model.provider != "google":
+            return None
+        cache_key = _provider_context_key(model, test_case.input)
+        if cache_key in self._provider_context_cache:
+            return self._provider_context_cache[cache_key]
+        try:
+            provider: Any = _require_provider(self.target_provider, "target", "provider cache")
+            cache_id = await provider.create_context_cache(
+                test_case.input,
+                cache_config.ttl_seconds,
+            )
+        except Exception as exc:
+            message = (
+                f"provider cache failed for case {test_case.id} on "
+                f"{model.provider}/{model.model_id}: {exc}"
+            )
+            if cache_config.on_error == "fail":
+                raise RuntimeError(message) from exc
+            self._provider_cache_warnings.append(message)
+            return None
+        self._provider_context_cache[cache_key] = cache_id
+        return cache_id
+
+    async def _prepare_provider_contexts(self, gabarito: Gabarito) -> None:
+        cache_config = self.config.provider_cache
+        if (
+            not cache_config.enabled
+            or not cache_config.cache_inputs
+            or self.config.target_model is None
+            or self.config.target_model.provider != "google"
+        ):
+            return
+        for test_case in gabarito.cases:
+            await self._provider_cache_id(test_case)
 
     async def _diagnose(
         self,
@@ -387,15 +528,18 @@ class Optimizer:
         iterations: list[Iteration],
         task_contract: TaskContract,
     ) -> Diagnosis:
-        completion = await self.reasoning_provider.complete(
+        target_model = _require_target_model(self.config, "optimize")
+        reasoning_model = _require_reasoning_model(self.config, "optimize")
+        reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        completion = await reasoning_provider.complete(
             _diagnosis_prompt(
                 prompt,
-                self.config.target_model,
+                target_model,
                 failures,
                 _memory(iterations),
                 task_contract,
             ),
-            self.config.reasoning_model.params,
+            reasoning_model.params,
         )
         try:
             payload = _json_payload(completion.text)
@@ -419,16 +563,19 @@ class Optimizer:
         iterations: list[Iteration],
         task_contract: TaskContract,
     ) -> RefinementProposal:
-        completion = await self.reasoning_provider.complete(
+        target_model = _require_target_model(self.config, "optimize")
+        reasoning_model = _require_reasoning_model(self.config, "optimize")
+        reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        completion = await reasoning_provider.complete(
             _refinement_prompt(
                 prompt,
-                self.config.target_model,
+                target_model,
                 diagnosis,
                 failures,
                 _memory(iterations),
                 task_contract,
             ),
-            self.config.reasoning_model.params,
+            reasoning_model.params,
         )
         return _proposal_from_completion(completion.text, prompt)
 
@@ -495,10 +642,13 @@ class Optimizer:
         attempt: int,
         max_attempts: int,
     ) -> RefinementProposal:
-        completion = await self.reasoning_provider.complete(
+        target_model = _require_target_model(self.config, "optimize")
+        reasoning_model = _require_reasoning_model(self.config, "optimize")
+        reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        completion = await reasoning_provider.complete(
             _repair_refinement_prompt(
                 prompt,
-                self.config.target_model,
+                target_model,
                 diagnosis,
                 failures,
                 _memory(iterations),
@@ -508,7 +658,7 @@ class Optimizer:
                 attempt,
                 max_attempts,
             ),
-            self.config.reasoning_model.params,
+            reasoning_model.params,
         )
         return _proposal_from_completion(completion.text, prompt)
 
@@ -534,6 +684,54 @@ class Optimizer:
         if asyncio.iscoroutine(result):
             return bool(await result)
         return bool(result)
+
+    def _require_validate_dependencies(self, mode: str) -> None:
+        target_model = _require_target_model(self.config, mode)
+        reasoning_model = _require_reasoning_model(self.config, mode)
+        if self.target_provider is None:
+            self.target_provider = self.provider_factory.get(target_model)
+        if self.reasoning_provider is None:
+            self.reasoning_provider = self.provider_factory.get(reasoning_model)
+        if not self.judge_specs:
+            self.judge_specs = [reasoning_model]
+        if not self.judge_providers:
+            self.judge_providers = [
+                self.provider_factory.get(spec) for spec in self.judge_specs
+            ]
+        if self.judge_provider is None and self.judge_providers:
+            self.judge_provider = self.judge_providers[0]
+
+
+def _judge_specs(config: OptimizationConfig) -> list[ModelSpec]:
+    if config.judge_models:
+        return config.judge_models
+    if config.judge_model is not None:
+        return [config.judge_model]
+    if config.reasoning_model is not None:
+        return [config.reasoning_model]
+    return []
+
+
+def _require_target_model(config: OptimizationConfig, mode: str) -> ModelSpec:
+    if config.target_model is None:
+        raise ValueError(f"target_model is required for {mode}")
+    return config.target_model
+
+
+def _require_reasoning_model(config: OptimizationConfig, mode: str) -> ModelSpec:
+    if config.reasoning_model is None:
+        raise ValueError(f"reasoning_model is required for {mode}")
+    return config.reasoning_model
+
+
+def _require_provider(
+    provider: ModelProvider | None,
+    provider_role: str,
+    mode: str,
+) -> ModelProvider:
+    if provider is None:
+        raise ValueError(f"{provider_role}_provider is required for {mode}")
+    return provider
 
 
 def _proposal_from_completion(text: str, prompt: Prompt) -> RefinementProposal:
@@ -580,9 +778,39 @@ def select_failures_for_refinement(verdicts: list[Verdict], max_cases: int = 10)
 
 
 def _cost_usd(result: CompletionResult, model: ModelSpec) -> float:
-    input_cost = result.tokens_in / 1_000_000 * model.cost_per_million_input_tokens_usd
+    cached = min(result.cached_tokens_in, result.tokens_in)
+    uncached = max(0, result.tokens_in - cached)
+    cached_rate = (
+        model.cost_per_million_cached_input_tokens_usd
+        if model.cost_per_million_cached_input_tokens_usd > 0
+        else model.cost_per_million_input_tokens_usd
+    )
+    input_cost = (
+        uncached / 1_000_000 * model.cost_per_million_input_tokens_usd
+        + cached / 1_000_000 * cached_rate
+    )
     output_cost = result.tokens_out / 1_000_000 * model.cost_per_million_output_tokens_usd
     return input_cost + output_cost
+
+
+def _provider_context_key(model: ModelSpec, input_text: str) -> str:
+    model_payload = json.dumps(model.model_dump(mode="json", by_alias=True), sort_keys=True)
+    return sha256(f"{model_payload}|{input_text}".encode()).hexdigest()
+
+
+def _params_with_provider_cache(
+    rendered_prompt: str,
+    model: ModelSpec,
+    config: OptimizationConfig,
+) -> Any:
+    params = model.params
+    if not config.provider_cache.enabled or model.provider != "openai":
+        return params
+    extra = dict(params.extra)
+    extra.setdefault("prompt_cache_key", sha256(rendered_prompt.encode()).hexdigest()[:32])
+    if config.provider_cache.openai_retention == "24h":
+        extra.setdefault("prompt_cache_retention", "24h")
+    return params.model_copy(update={"extra": extra})
 
 
 def _plateau(scores: list[float], window: int, min_delta: float) -> bool:
@@ -590,6 +818,150 @@ def _plateau(scores: list[float], window: int, min_delta: float) -> bool:
         return False
     recent = scores[-window:]
     return max(recent) - min(recent) < min_delta
+
+
+def comparison_summary(run: OptimizationRun, config: OptimizationConfig) -> ComparisonSummary:
+    rows = [
+        (
+            iteration.comparison_label or f"v{iteration.version}",
+            iteration.score,
+            iteration.score_report.operational.total_cost_usd,
+            iteration.score_report.operational.p95_latency_ms,
+            _comparison_value(iteration, run.iterations, config),
+        )
+        for iteration in run.iterations
+    ]
+    if not rows:
+        return ComparisonSummary()
+    best_score = max(rows, key=lambda item: (item[1], -item[2], -item[3]))
+    lowest_cost = min(rows, key=lambda item: (item[2], -item[1], item[3]))
+    best_value = max(rows, key=lambda item: (item[4], item[1], -item[2]))
+    return ComparisonSummary(
+        best_score=_winner(best_score),
+        lowest_cost=_winner(lowest_cost),
+        best_value=_winner(best_value),
+        case_winners=_case_winners(run.iterations, config),
+    )
+
+
+def _winner(row: tuple[str, float, float, float, float]) -> ComparisonWinner:
+    label, score, cost, latency, value = row
+    return ComparisonWinner(
+        label=label,
+        score=score,
+        cost_usd=cost,
+        latency_ms=latency,
+        value_score=value,
+    )
+
+
+def _case_winners(
+    iterations: list[Iteration],
+    config: OptimizationConfig,
+) -> list[ComparisonCaseWinner]:
+    by_case: dict[str, list[tuple[str, Verdict]]] = {}
+    for iteration in iterations:
+        label = iteration.comparison_label or f"v{iteration.version}"
+        for verdict in iteration.verdicts:
+            by_case.setdefault(verdict.test_case.id, []).append((label, verdict))
+    winners: list[ComparisonCaseWinner] = []
+    for case_id, verdicts in sorted(by_case.items()):
+        best_score = max(
+            verdicts,
+            key=lambda item: (
+                item[1].score,
+                -item[1].execution.cost_usd,
+                -item[1].execution.latency_ms,
+            ),
+        )[0]
+        lowest_cost = min(
+            verdicts,
+            key=lambda item: (
+                item[1].execution.cost_usd,
+                -item[1].score,
+                item[1].execution.latency_ms,
+            ),
+        )[0]
+        best_value = max(
+            verdicts,
+            key=lambda item: (
+                _case_value(item[1], [verdict for _, verdict in verdicts], config),
+                item[1].score,
+                -item[1].execution.cost_usd,
+            ),
+        )[0]
+        winners.append(
+            ComparisonCaseWinner(
+                test_case_id=case_id,
+                best_score=best_score,
+                lowest_cost=lowest_cost,
+                best_value=best_value,
+            )
+        )
+    return winners
+
+
+def _comparison_value(
+    iteration: Iteration,
+    iterations: list[Iteration],
+    config: OptimizationConfig,
+) -> float:
+    scores = [item.score for item in iterations]
+    costs = [item.score_report.operational.total_cost_usd for item in iterations]
+    latencies = [item.score_report.operational.p95_latency_ms for item in iterations]
+    return _weighted_value(
+        quality=_normalize_high(iteration.score, scores),
+        cost=_normalize_low(iteration.score_report.operational.total_cost_usd, costs),
+        latency=_normalize_low(iteration.score_report.operational.p95_latency_ms, latencies),
+        config=config,
+    )
+
+
+def _case_value(verdict: Verdict, verdicts: list[Verdict], config: OptimizationConfig) -> float:
+    return _weighted_value(
+        quality=_normalize_high(verdict.score, [item.score for item in verdicts]),
+        cost=_normalize_low(
+            verdict.execution.cost_usd,
+            [item.execution.cost_usd for item in verdicts],
+        ),
+        latency=_normalize_low(
+            verdict.execution.latency_ms,
+            [item.execution.latency_ms for item in verdicts],
+        ),
+        config=config,
+    )
+
+
+def _weighted_value(
+    quality: float,
+    cost: float,
+    latency: float,
+    config: OptimizationConfig,
+) -> float:
+    total = (
+        config.comparison_value_quality_weight
+        + config.comparison_value_cost_weight
+        + config.comparison_value_latency_weight
+    )
+    if total <= 0:
+        return quality
+    return (
+        quality * config.comparison_value_quality_weight
+        + cost * config.comparison_value_cost_weight
+        + latency * config.comparison_value_latency_weight
+    ) / total
+
+
+def _normalize_high(value: float, values: list[float]) -> float:
+    low = min(values)
+    high = max(values)
+    if high == low:
+        return 1.0
+    return (value - low) / (high - low)
+
+
+def _normalize_low(value: float, values: list[float]) -> float:
+    return 1.0 - _normalize_high(value, values)
 
 
 def _aggregate_executions(
@@ -607,6 +979,7 @@ def _aggregate_executions(
         actual_output=majority_output,
         latency_ms=mean(latencies),
         tokens_in=sum(run.tokens_in for run in runs),
+        cached_tokens_in=sum(run.cached_tokens_in for run in runs),
         tokens_out=sum(run.tokens_out for run in runs),
         cost_usd=sum(run.cost_usd for run in runs),
         finish_reason="majority_vote",

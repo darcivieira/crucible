@@ -51,6 +51,8 @@ async def execute_run_request(
     )
     if request.mode == "validate":
         return await validate_as_run(optimizer, request.prompt, request.gabarito, store)
+    if request.mode == "compare":
+        return await optimizer.compare_models(request.prompt, request.gabarito)
     return await optimizer.optimize(request.prompt, request.gabarito)
 
 
@@ -71,6 +73,7 @@ async def validate_as_run(
         iterations=[iteration],
         status="completed",
         stop_reason="validation_only",
+        provider_cache_warnings=optimizer.provider_cache_warnings,
         started_at=started_at,
         ended_at=datetime.now(UTC),
     )
@@ -82,6 +85,7 @@ def run_mode_label(mode: str | None) -> str:
     labels: dict[str | None, str] = {
         "validate": "Validate",
         "optimize": "Optimize",
+        "compare": "Compare",
         None: "Optimize",
     }
     return labels.get(mode, str(mode))
@@ -98,6 +102,7 @@ def stop_reason_label(reason: str | None) -> str:
         "cancelled": "Cancelado",
         "validation_only": "Validação executada",
         "reasoning_failed_to_refine": "Reasoning não gerou prompt válido",
+        "comparison_completed": "Comparação concluída",
         None: "Em andamento",
     }
     return labels.get(reason, str(reason))
@@ -112,6 +117,8 @@ def next_step_hint(
         return "Revise worst cases e custo antes de promover o prompt."
     if stop_reason == "validation_only":
         return "Se o score estiver baixo, rode optimize ou ajuste gabarito/assertions."
+    if stop_reason == "comparison_completed":
+        return "Compare os vencedores por score, custo e custo-benefício antes de promover."
     if stop_reason == "plateau":
         return "Analise regressões e considere novos exemplos ou uma rubrica mais objetiva."
     if stop_reason == "max_iterations":

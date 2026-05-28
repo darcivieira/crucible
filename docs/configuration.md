@@ -28,6 +28,16 @@ objective_quality_weight: 1.0
 objective_cost_weight: 0.0
 objective_latency_weight: 0.0
 active_learning_suggestions: 0
+provider_cache:
+  enabled: false
+  ttl_seconds: 3600
+  cache_inputs: true
+  on_error: fail
+  openai_retention: in_memory
+comparison_models: []
+comparison_value_quality_weight: 0.8
+comparison_value_cost_weight: 0.2
+comparison_value_latency_weight: 0.0
 
 target_model:
   provider: ollama
@@ -46,6 +56,7 @@ target_model:
     retry_attempts: 2
     retry_backoff_seconds: 0.5
   cost_per_million_input_tokens_usd: 0.0
+  cost_per_million_cached_input_tokens_usd: 0.0
   cost_per_million_output_tokens_usd: 0.0
   context_window: 8192
   supports_json_mode: false
@@ -83,6 +94,11 @@ embedding_model: null
 | `instability_std_threshold_ms` | Desvio de latência usado para marcar instabilidade. |
 | `selection_strategy` | `quality` ou `multi_objective`. |
 | `active_learning_suggestions` | Quantidade de sugestões de novos casos ao final da run. |
+| `provider_cache` | Configura cache remoto do provider quando suportado. |
+| `comparison_models` | Lista de modelos alvo para `compare-models` ou modo `compare` do dashboard/API. |
+| `comparison_value_quality_weight` | Peso de qualidade no ranking de custo-benefício entre modelos. |
+| `comparison_value_cost_weight` | Peso de custo no ranking de custo-benefício entre modelos. |
+| `comparison_value_latency_weight` | Peso de latência no ranking de custo-benefício entre modelos. |
 
 ## Reparo De Refino
 
@@ -218,6 +234,114 @@ objective_latency_weight: 0.1
 Quando `selection_strategy` é `multi_objective`, `best_iteration` usa
 `objective_score`, e a run registra `pareto_frontier_versions`.
 
+## Comparação De Modelos
+
+`comparison_models` define os targets avaliados pelo comando `compare-models`, pela
+API com `mode: compare` e pelo dashboard em modo `Compare`.
+
+Nesse modo, `target_model` e `reasoning_model` não são obrigatórios. Eles continuam
+obrigatórios para `validate`, `optimize` e `estimate-cost`, porque esses fluxos
+precisam de um target principal e de um modelo de raciocínio/judge padrão.
+
+```yaml
+comparison_models:
+  - label: gemini-flash
+    model:
+      provider: google
+      model_id: gemini-2.0-flash
+      role: target
+      params:
+        temperature: 0.0
+        max_tokens: 1024
+      cost_per_million_input_tokens_usd: 0.10
+      cost_per_million_output_tokens_usd: 0.40
+  - label: gpt-mini
+    model:
+      provider: openai
+      model_id: gpt-5-mini
+      role: target
+      api_mode: responses
+      params:
+        temperature: 0.0
+        max_tokens: 1024
+      cost_per_million_input_tokens_usd: 0.25
+      cost_per_million_cached_input_tokens_usd: 0.025
+      cost_per_million_output_tokens_usd: 2.00
+```
+
+Cada item roda uma única iteração com o mesmo prompt e o mesmo gabarito. A run
+resultante mostra:
+
+- score e pass rate por modelo;
+- custo total e p95 de latência por modelo;
+- tokens de entrada cacheados, quando o provider reporta essa métrica;
+- vencedor global por qualidade;
+- vencedor global por menor custo;
+- vencedor global por custo-benefício;
+- vencedores por caso.
+
+O ranking de custo-benefício normaliza qualidade, custo e latência dentro da própria
+comparação. Ajuste os pesos quando quiser privilegiar preço ou tempo:
+
+```yaml
+comparison_value_quality_weight: 0.7
+comparison_value_cost_weight: 0.3
+comparison_value_latency_weight: 0.0
+```
+
+Com os pesos acima, qualidade ainda domina, mas custo passa a desempatar de forma
+explícita. Se todos os pesos forem zero, o ranking volta a usar apenas qualidade.
+
+## Cache Remoto Do Provider
+
+`provider_cache` habilita recursos de cache do provider para reduzir custo quando o
+mesmo contexto é reutilizado.
+
+```yaml
+provider_cache:
+  enabled: true
+  ttl_seconds: 3600
+  cache_inputs: true
+  on_error: fallback
+  openai_retention: 24h
+```
+
+Use quando os inputs são grandes, quando você roda vários modelos/casos repetidos ou
+quando está comparando prompts sobre o mesmo material. O Crucible prepara o contexto
+cacheado antes de executar a iteração e registra `cached_tokens` nas métricas quando
+o provider devolve essa informação.
+
+Campos:
+
+- `enabled`: liga o comportamento.
+- `ttl_seconds`: tempo de vida solicitado para caches explícitos, usado pelo Google.
+- `cache_inputs`: cria cache por `case.input`.
+- `on_error`: `fail` aborta se o cache remoto falhar; `fallback` segue sem cache e
+  registra warning na run.
+- `openai_retention`: `in_memory` ou `24h`, usado apenas como instrumentação para
+  OpenAI.
+
+Hoje existem dois comportamentos diferentes:
+
+- Google/Gemini usa cache explícito por input. O Crucible cria `cachedContents` e
+  passa o `cache_id` nas chamadas seguintes.
+- OpenAI usa prompt caching automático. Não existe um cache ID manual equivalente no
+  fluxo atual; o Crucible adiciona `prompt_cache_key`/retenção nos parâmetros quando
+  habilitado e registra `cached_tokens_in` quando a API reporta tokens cacheados.
+
+Para custo com cache, declare também:
+
+```yaml
+target_model:
+  cost_per_million_input_tokens_usd: 1.00
+  cost_per_million_cached_input_tokens_usd: 0.10
+  cost_per_million_output_tokens_usd: 4.00
+```
+
+Se `cost_per_million_cached_input_tokens_usd` ficar em `0.0`, o Crucible usa o preço
+normal de input para os tokens cacheados. Isso evita subestimar custo por acidente
+quando você ainda não informou o preço correto do provider.
+
 ## Active Learning
 
 ```yaml
@@ -246,6 +370,7 @@ rate_limit:
   retry_attempts: 2
   retry_backoff_seconds: 0.5
 cost_per_million_input_tokens_usd: 1.25
+cost_per_million_cached_input_tokens_usd: 0.125
 cost_per_million_output_tokens_usd: 10.0
 context_window: 128000
 supports_json_mode: true
@@ -393,6 +518,7 @@ CRUCIBLE_PLUGIN_MODULES=my_project.crucible_plugin
 O tracking de custo depende de:
 
 - `cost_per_million_input_tokens_usd`
+- `cost_per_million_cached_input_tokens_usd`
 - `cost_per_million_output_tokens_usd`
 
 Providers locais têm custo zero por padrão. Providers cloud também ficam com custo

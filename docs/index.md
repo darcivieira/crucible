@@ -22,6 +22,9 @@ Use este índice conforme o que você precisa fazer.
   assertions estruturais.
 - [LLM-as-judge](guides/llm-as-judge.md): avaliação subjetiva com rubrica.
 - [Train/val/test](guides/train-val-test.md): reduzir overfitting ao gabarito.
+- [Comparação de modelos](guides/model-comparison.md): escolher target por score,
+  custo e custo-benefício.
+- [Cache do provider](guides/provider-cache.md): reduzir custo com contexto cacheado.
 - [Uso em CI](guides/ci.md): validação de regressões em pull requests.
 - [Uso via SDK](guides/sdk.md): integração Python programática.
 - [Plugins](guides/plugins.md): assertions e importadores de domínio.
@@ -74,6 +77,7 @@ Use este índice conforme o que você precisa fazer.
 - [Triagem de suporte](../examples/customer-support-triage/)
 - [LLM-as-judge para risco](../examples/llm-judge-risk/)
 - [Train/val/test](../examples/train-val-test/)
+- [Comparação de modelos](../examples/model-comparison/)
 
 ## Comunidade
 

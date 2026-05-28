@@ -5,6 +5,7 @@ Este documento foi mantido como atalho para links antigos.
 A documentação de uso foi reorganizada em guias menores:
 
 - [Quickstart](quickstart.md)
+- [Guia do usuário](user-guide.md)
 - [Referência CLI](cli.md)
 - [SDK Python](sdk.md)
 - [Configuração](configuration.md)

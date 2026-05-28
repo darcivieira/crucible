@@ -29,6 +29,7 @@ class AssertionContext(BaseModel):
     judge_params_list: list[Any] = Field(default_factory=list)
     target_output_format_type: str | None = None
     target_output_schema: dict[str, Any] = Field(default_factory=dict)
+    input_text: str | None = None
 
 
 class AssertionResult(BaseModel):
@@ -292,9 +293,26 @@ class JsonSchema(BaseAssertion):
         return AssertionResult(score=1.0, passed=True)
 
 
+class FieldAssertionSpec(BaseModel):
+    type: Literal[
+        "exact",
+        "normalized_exact",
+        "contains",
+        "embedding_similarity",
+        "llm_judge",
+    ] = "exact"
+    threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    case_sensitive: bool = False
+    bidirectional: bool = True
+    rubric: str = ""
+    pass_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    position_swap: bool = False
+
+
 class FieldByField(BaseAssertion):
     type: Literal["field_by_field"] = "field_by_field"
     weights: dict[str, float] = Field(default_factory=dict)
+    field_assertions: dict[str, FieldAssertionSpec] = Field(default_factory=dict)
 
     async def evaluate(
         self, expected: str, actual: str, context: AssertionContext
@@ -311,18 +329,128 @@ class FieldByField(BaseAssertion):
         if not fields:
             return AssertionResult(score=1.0, passed=True)
 
-        total_weight = sum(self.weights.get(field, 1.0) for field in fields)
-        matched_weight = sum(
-            self.weights.get(field, 1.0)
-            for field in fields
-            if actual_json.get(field) == expected_json[field]
-        )
-        score = matched_weight / total_weight
+        field_results: dict[str, dict[str, Any]] = {}
+        total_weight = 0.0
+        weighted_score = 0.0
+        passed = True
+        for field in fields:
+            weight = self.weights.get(field, 1.0)
+            total_weight += weight
+            result = await _evaluate_field(
+                field=field,
+                expected=expected_json[field],
+                actual=actual_json.get(field),
+                actual_missing=field not in actual_json,
+                spec=self.field_assertions.get(field, FieldAssertionSpec()),
+                context=context,
+            )
+            weighted_score += weight * result.score
+            passed = passed and result.passed
+            field_results[field] = result.detail | {
+                "score": result.score,
+                "passed": result.passed,
+                "weight": weight,
+            }
+        score = weighted_score / total_weight if total_weight else 0.0
         return AssertionResult(
             score=score,
-            passed=math.isclose(score, 1.0),
-            detail={"fields": fields},
+            passed=passed,
+            detail={"fields": fields, "field_results": field_results},
         )
+
+
+async def _evaluate_field(
+    field: str,
+    expected: Any,
+    actual: Any,
+    actual_missing: bool,
+    spec: FieldAssertionSpec,
+    context: AssertionContext,
+) -> AssertionResult:
+    if actual_missing:
+        return AssertionResult(
+            score=0.0,
+            passed=False,
+            detail={"type": spec.type, "error": "missing_field"},
+        )
+    expected_text = _field_value_text(expected)
+    actual_text = _field_value_text(actual)
+    if spec.type == "exact":
+        passed = actual == expected
+        return AssertionResult(
+            score=1.0 if passed else 0.0,
+            passed=passed,
+            detail={"type": spec.type},
+        )
+    if spec.type == "normalized_exact":
+        left = _normalize(expected_text)
+        right = _normalize(actual_text)
+        if not spec.case_sensitive:
+            left = left.lower()
+            right = right.lower()
+        passed = left == right
+        return AssertionResult(
+            score=1.0 if passed else 0.0,
+            passed=passed,
+            detail={"type": spec.type},
+        )
+    if spec.type == "contains":
+        left = expected_text if spec.case_sensitive else expected_text.lower()
+        right = actual_text if spec.case_sensitive else actual_text.lower()
+        passed = left in right or (spec.bidirectional and right in left)
+        return AssertionResult(
+            score=1.0 if passed else 0.0,
+            passed=passed,
+            detail={"type": spec.type, "bidirectional": spec.bidirectional},
+        )
+    if spec.type == "embedding_similarity":
+        result = await EmbeddingSimilarity(threshold=spec.threshold).evaluate(
+            expected_text,
+            actual_text,
+            context,
+        )
+        result.detail = result.detail | {"type": spec.type, "threshold": spec.threshold}
+        return result
+    if spec.type == "llm_judge":
+        threshold = spec.pass_threshold if spec.pass_threshold is not None else spec.threshold
+        result = await LLMJudge(
+            rubric=_field_judge_rubric(field, spec),
+            pass_threshold=threshold,
+            position_swap=spec.position_swap,
+        ).evaluate(
+            _field_judge_expected(field, expected_text, context),
+            actual_text,
+            context,
+        )
+        result.detail = result.detail | {"type": spec.type, "threshold": threshold}
+        return result
+    return AssertionResult(score=0.0, passed=False, detail={"error": "unknown_field_assertion"})
+
+
+def _field_value_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _field_judge_rubric(field: str, spec: FieldAssertionSpec) -> str:
+    if spec.rubric.strip():
+        return spec.rubric
+    return (
+        f"Avalie o campo '{field}'. A resposta atual deve ser equivalente ao valor esperado. "
+        "Se houver input original no esperado, verifique também se a resposta atual está "
+        "apoiada pelo texto fonte e não inventa informação."
+    )
+
+
+def _field_judge_expected(field: str, expected: str, context: AssertionContext) -> str:
+    if context.input_text is None:
+        return expected
+    return (
+        f"Campo: {field}\n"
+        f"Valor esperado:\n{expected}\n\n"
+        f"Input original:\n{context.input_text}"
+    )
 
 
 class PydanticModel(BaseAssertion):

@@ -3,6 +3,9 @@
 Este guia leva você de um diretório vazio até uma run otimizada e visível no
 dashboard local.
 
+Se você está chegando agora e quer uma explicação mais guiada, leia também o
+[Guia do usuário](user-guide.md).
+
 ## Pré-Requisitos
 
 - Python 3.13.
@@ -157,6 +160,30 @@ Use `Validate` quando quiser medir rapidamente o prompt atual. Use `Optimize` qu
 quiser que o Crucible proponha versões melhores. Use `Compare` quando quiser avaliar
 os modelos de `comparison_models`. A tela aceita caminhos locais para `prompt.txt`,
 `gabarito.yaml` e `config.yaml`, ou conteúdo colado nos editores.
+
+Também é possível escolher host e porta:
+
+```bash
+uv run crucible serve --host 0.0.0.0 --port 7777
+```
+
+Use `0.0.0.0` apenas em rede confiável. O dashboard não tem autenticação.
+
+## Usar API Local
+
+Se você quer integrar o Crucible com outro sistema, suba a API:
+
+```bash
+uv run crucible api --port 7788
+```
+
+Teste com `curl`:
+
+```bash
+curl -s http://127.0.0.1:7788/runs
+```
+
+Veja exemplos completos em [REST API](api.md).
 
 ## Exportar Artefatos
 

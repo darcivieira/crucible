@@ -397,6 +397,7 @@ class Optimizer:
             judge_params_list=[spec.params for spec in self.judge_specs],
             target_output_format_type=target_model.output_format.type,
             target_output_schema=target_model.output_format.schema_,
+            input_text=test_case.input,
         )
         assertion = await test_case.assertion.evaluate(
             test_case.expected_output,

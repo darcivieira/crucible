@@ -11,6 +11,11 @@ cases:
       weights:
         classification: 95
         text_validation: 5
+      field_assertions:
+        classification:
+          type: exact
+        text_validation:
+          type: contains
     tags: [prazo]
   - id: intimacao-001
     input: "Intime-se o requerido acerca da decisao de fls. 23."
@@ -21,6 +26,11 @@ cases:
       weights:
         classification: 95
         text_validation: 5
+      field_assertions:
+        classification:
+          type: exact
+        text_validation:
+          type: contains
     tags: [intimacao]
   - id: outro-001
     input: "Certifico que os autos foram conclusos para despacho."
@@ -31,4 +41,9 @@ cases:
       weights:
         classification: 95
         text_validation: 5
+      field_assertions:
+        classification:
+          type: exact
+        text_validation:
+          type: normalized_exact
     tags: [outro]

@@ -155,6 +155,13 @@ Se você quer prioridade por chave, use `field_by_field.weights`. O caminho
 `json_schema` com payload esperado é uma compatibilidade para gabaritos gerados
 automaticamente e não aplica pesos por campo.
 
+`field_by_field` também aceita `field_assertions` para escolher o critério por campo.
+Sem esse bloco, todos os campos usam igualdade exata. Com ele, um campo fechado como
+`classification` pode usar `exact`, enquanto um campo aberto como `text_validation`
+pode usar `contains`, `embedding_similarity` ou `llm_judge`. O score do caso continua
+sendo ponderado por `weights`; o score individual de cada campo vem do critério
+configurado.
+
 Essa separação importa porque nem todo provider garante schema com a mesma força, e
 alguns modelos podem ignorar parcialmente o contrato.
 

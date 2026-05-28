@@ -97,10 +97,15 @@ def test_provider_payload_and_parse_shapes():
     parsed = openai.parse(
         {
             "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "prompt_tokens_details": {"cached_tokens": 6},
+            },
         }
     )
     assert parsed.tokens_out == 2
+    assert parsed.cached_tokens_in == 6
 
     anthropic = AnthropicAdapter(_spec("anthropic"), "http://localhost", "key")
     assert "anthropic-version" in anthropic.headers
@@ -108,7 +113,14 @@ def test_provider_payload_and_parse_shapes():
 
     google = GoogleAdapter(_spec("google"), "http://localhost", "key")
     assert google.path.endswith(":generateContent")
-    assert google.parse({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}).text == "ok"
+    parsed_google = google.parse(
+        {
+            "candidates": [{"content": {"parts": [{"text": "ok"}]}}],
+            "usageMetadata": {"cachedContentTokenCount": 3},
+        }
+    )
+    assert parsed_google.text == "ok"
+    assert parsed_google.cached_tokens_in == 3
 
     llamacpp = LlamaCppAdapter(_spec("llamacpp"), "http://localhost")
     assert llamacpp.path == "/completion"

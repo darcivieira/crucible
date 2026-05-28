@@ -1,7 +1,7 @@
 import yaml
 from typer.testing import CliRunner
 
-from crucible import Contains, ModelSpec, OptimizationConfig, Prompt
+from crucible import ComparisonTarget, Contains, ModelSpec, OptimizationConfig, Prompt
 from crucible import TestCase as CrucibleTestCase
 from crucible.modules.optimizer.domain.models import (
     ExecutionResult,
@@ -77,6 +77,50 @@ def test_validate_runs_with_fake_provider(tmp_path):
 
     assert result.exit_code == 0
     assert "100.00" in result.output
+
+
+def test_compare_models_runs_with_fake_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("CRUCIBLE_SQLITE_PATH", str(tmp_path / "crucible.sqlite"))
+    monkeypatch.setenv("CRUCIBLE_REPORTS_DIR", str(tmp_path / "reports"))
+    from crucible.core import settings as settings_module
+
+    settings_module._settings = None
+    prompt, gabarito, config = _write_project_files(tmp_path)
+    loaded = OptimizationConfig.model_validate(yaml.safe_load(config.read_text(encoding="utf-8")))
+    loaded.target_model = None
+    loaded.reasoning_model = None
+    loaded.comparison_models = [
+        ComparisonTarget(
+            label="fake-a",
+            model=ModelSpec(provider="fake", model_id="target-a", role="target"),
+        ),
+        ComparisonTarget(
+            label="fake-b",
+            model=ModelSpec(provider="fake", model_id="target-b", role="target"),
+        ),
+    ]
+    config.write_text(
+        yaml.safe_dump(loaded.model_dump(mode="json", by_alias=True), sort_keys=False),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "compare-models",
+            "--prompt",
+            str(prompt),
+            "--gabarito",
+            str(gabarito),
+            "--config",
+            str(config),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Model Comparison" in result.output
+    assert "Winners:" in result.output
+    assert "comparison_completed" in result.output
 
 
 def test_report_and_diff_commands_load_saved_run(tmp_path, monkeypatch):

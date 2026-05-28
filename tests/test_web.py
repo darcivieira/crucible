@@ -6,6 +6,9 @@ from crucible import Contains, ModelSpec, OptimizationConfig, Prompt
 from crucible import TestCase as CrucibleTestCase
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.domain.models import (
+    ComparisonCaseWinner,
+    ComparisonSummary,
+    ComparisonWinner,
     ExecutionResult,
     Iteration,
     OptimizationRun,
@@ -46,6 +49,19 @@ def test_dashboard_routes(tmp_path):
     assert api_runs_response.json()[0]["id"] == run.id
     assert api_run_response.status_code == 200
     assert api_run_response.json()["id"] == run.id
+
+
+def test_dashboard_shows_comparison_summary(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    run = _saved_comparison_run(store)
+    client = TestClient(create_dashboard_app(store))
+
+    response = client.get(f"/runs/{run.id}")
+
+    assert response.status_code == 200
+    assert "Comparação de modelos" in response.text
+    assert "Melhor custo-benefício" in response.text
+    assert "case" in response.text
 
 
 def test_dashboard_new_run_form_creates_validate_task(tmp_path):
@@ -110,6 +126,51 @@ def test_dashboard_new_run_form_shows_validation_errors(tmp_path):
     assert "Não foi possível montar a run" in response.text
 
 
+def test_dashboard_new_run_form_creates_compare_task(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    client = TestClient(create_dashboard_app(store))
+
+    response = client.post(
+        "/runs/new",
+        data={
+            "mode": "compare",
+            "prompt_content": "{input}",
+            "gabarito_content": """
+name: sample
+version: v1
+cases:
+  - id: case
+    input: ok
+    expected_output: ok
+    assertion:
+      type: contains
+""",
+            "config_content": """
+threshold: 100
+max_iterations: 1
+comparison_models:
+  - label: fake-a
+    model:
+      provider: fake
+      model_id: target-a
+      role: target
+  - label: fake-b
+    model:
+      provider: fake
+      model_id: target-b
+      role: target
+""",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    run_id = store.list_runs()[0].id
+    run = asyncio.run(store.load_run(run_id))
+    assert run.run_mode == "compare"
+    assert run.stop_reason == "comparison_completed"
+
+
 def test_dashboard_filters_verdicts(tmp_path):
     store = SQLiteRunStore(tmp_path / "runs.sqlite")
     run = _saved_run(store)
@@ -161,6 +222,72 @@ def _saved_run(store: SQLiteRunStore) -> OptimizationRun:
                 prompt=Prompt(template="novo {input}", variables=["input"]),
                 verdicts=[second_verdict],
                 score_report=aggregate_score([second_verdict]),
+            ),
+        ]
+    )
+    asyncio.run(store.save_run(run))
+    return run
+
+
+def _saved_comparison_run(store: SQLiteRunStore) -> OptimizationRun:
+    case = CrucibleTestCase(id="case", input="ok", expected_output="ok", assertion=Contains())
+    config = OptimizationConfig(
+        target_model=ModelSpec(provider="fake", model_id="t", role="target"),
+        reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
+    )
+    run = OptimizationRun(
+        run_mode="compare",
+        config=config,
+        gabarito_hash="g",
+        initial_prompt_hash="p",
+        status="completed",
+        stop_reason="comparison_completed",
+        comparison_summary=ComparisonSummary(
+            best_score=ComparisonWinner(label="accurate", score=100, cost_usd=0.02),
+            lowest_cost=ComparisonWinner(label="cheap", score=70, cost_usd=0.01),
+            best_value=ComparisonWinner(label="accurate", score=100, cost_usd=0.02),
+            case_winners=[
+                ComparisonCaseWinner(
+                    test_case_id="case",
+                    best_score="accurate",
+                    lowest_cost="cheap",
+                    best_value="accurate",
+                )
+            ],
+        ),
+    )
+    first_verdict = Verdict(
+        test_case=case,
+        execution=ExecutionResult(test_case_id="case", actual_output="wrong", latency_ms=4),
+        score=0.7,
+        passed=False,
+    )
+    second_verdict = Verdict(
+        test_case=case,
+        execution=ExecutionResult(
+            test_case_id="case",
+            actual_output="ok",
+            latency_ms=8,
+            cost_usd=0.02,
+        ),
+        score=1,
+        passed=True,
+    )
+    run.iterations.extend(
+        [
+            Iteration(
+                version=0,
+                prompt=Prompt(template="{input}", variables=["input"]),
+                verdicts=[first_verdict],
+                score_report=aggregate_score([first_verdict]),
+                comparison_label="cheap",
+            ),
+            Iteration(
+                version=1,
+                prompt=Prompt(template="{input}", variables=["input"]),
+                verdicts=[second_verdict],
+                score_report=aggregate_score([second_verdict]),
+                comparison_label="accurate",
             ),
         ]
     )

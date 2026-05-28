@@ -165,6 +165,41 @@ Compara duas runs.
 uv run crucible compare-runs <run-a> <run-b>
 ```
 
+Use quando você já tem duas execuções salvas e quer comparar o melhor score,
+quantidade de iterações, custo total e motivo de parada. Ele não chama nenhum
+provider; apenas lê runs existentes em `.crucible/`.
+
+## `compare-models`
+
+Compara vários modelos alvo usando o mesmo prompt e o mesmo gabarito.
+
+```bash
+uv run crucible compare-models \
+  --prompt prompt.txt \
+  --gabarito gabarito.yaml \
+  --config config.yaml
+```
+
+Use `compare-models` quando você quer escolher o melhor `target_model` antes de
+otimizar um prompt. O comando executa uma iteração por entrada de
+`comparison_models`, calcula score, pass rate, custo, latência e tokens cacheados, e
+salva uma run com `run_mode: compare`.
+
+Para esse comando, `target_model` e `reasoning_model` podem ficar ausentes do
+`config.yaml`. O Crucible usa cada item de `comparison_models` como target
+temporário. Ao promover o vencedor para `validate` ou `optimize`, aí sim configure
+`target_model` e `reasoning_model`.
+
+O resultado mostra três vencedores:
+
+- melhor score: prioriza qualidade;
+- menor custo: prioriza custo total;
+- melhor custo-benefício: usa os pesos `comparison_value_*` do config.
+
+Ele não pede refino ao `reasoning_model`. A comparação é uma fotografia controlada:
+mesmo prompt, mesmos casos, um target por vez. Depois de escolher o modelo vencedor,
+rode `validate` ou `optimize` com esse modelo como `target_model`.
+
 ## `report`
 
 Gera relatório.

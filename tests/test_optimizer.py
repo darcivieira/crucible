@@ -3,6 +3,7 @@ import json
 import pytest
 
 from crucible import (
+    ComparisonTarget,
     Contains,
     Gabarito,
     ModelParams,
@@ -20,7 +21,11 @@ from crucible.modules.optimizer.application.contracts import (
     validate_refinement_against_contract,
 )
 from crucible.modules.optimizer.domain.assertions import FieldByField
-from crucible.modules.optimizer.domain.models import ModelOutputFormat, RefinementProposal
+from crucible.modules.optimizer.domain.models import (
+    CompletionResult,
+    ModelOutputFormat,
+    RefinementProposal,
+)
 
 
 class MemoryStore:
@@ -46,6 +51,16 @@ class MemoryCache:
 
     async def set(self, key, value):
         self.values[key] = value
+
+
+class SequencedProvider:
+    def __init__(self, results):
+        self.results = list(results)
+        self.prompts = []
+
+    async def complete(self, prompt, params):
+        self.prompts.append(prompt)
+        return self.results.pop(0)
 
 
 def _config(max_iterations=3, threshold=100):
@@ -95,6 +110,28 @@ async def test_validate_executes_cases_and_scores():
 
     assert iteration.score == 100
     assert iteration.verdicts[0].passed is True
+
+
+@pytest.mark.asyncio
+async def test_validate_requires_target_and_reasoning_models():
+    config = _config()
+    config.target_model = None
+
+    optimizer = Optimizer(config, store=MemoryStore(), cache=MemoryCache())
+
+    with pytest.raises(ValueError, match="target_model is required for validate"):
+        await optimizer.validate(Prompt(template="{input}", variables=["input"]), _gabarito())
+
+
+@pytest.mark.asyncio
+async def test_optimize_requires_reasoning_model():
+    config = _config()
+    config.reasoning_model = None
+
+    optimizer = Optimizer(config, store=MemoryStore(), cache=MemoryCache())
+
+    with pytest.raises(ValueError, match="reasoning_model is required for optimize"):
+        await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
 
 
 @pytest.mark.asyncio
@@ -601,3 +638,108 @@ async def test_optimizer_honors_cancellation_before_iteration():
     assert run.status == "aborted"
     assert run.stop_reason == "cancelled"
     assert run.iterations == []
+
+
+@pytest.mark.asyncio
+async def test_compare_models_records_rankings_and_case_winners():
+    config = _config(max_iterations=1, threshold=100)
+    config.target_model = None
+    config.reasoning_model = None
+    cheap = ModelSpec(
+        provider="fake",
+        model_id="cheap",
+        role="target",
+        cost_per_million_input_tokens_usd=1,
+        cost_per_million_output_tokens_usd=1,
+    )
+    accurate = ModelSpec(
+        provider="fake",
+        model_id="accurate",
+        role="target",
+        cost_per_million_input_tokens_usd=10,
+        cost_per_million_output_tokens_usd=10,
+    )
+    config.comparison_models = [
+        ComparisonTarget(label="cheap", model=cheap),
+        ComparisonTarget(label="accurate", model=accurate),
+    ]
+    providers = {
+        "cheap": SequencedProvider(
+            [CompletionResult(text="wrong", tokens_in=100, tokens_out=100)]
+        ),
+        "accurate": SequencedProvider(
+            [CompletionResult(text="ok", tokens_in=100, tokens_out=100)]
+        ),
+    }
+
+    class Factory:
+        def get(self, spec):
+            return providers[spec.model_id]
+
+        def get_embedding(self, spec):
+            raise NotImplementedError
+
+    optimizer = Optimizer(
+        config,
+        provider_factory=Factory(),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.compare_models(
+        Prompt(template="{input}", variables=["input"]),
+        _gabarito(),
+    )
+
+    assert run.run_mode == "compare"
+    assert run.stop_reason == "comparison_completed"
+    assert [iteration.comparison_label for iteration in run.iterations] == ["cheap", "accurate"]
+    assert run.comparison_summary is not None
+    assert run.comparison_summary.best_score.label == "accurate"
+    assert run.comparison_summary.lowest_cost.label == "cheap"
+    assert run.comparison_summary.case_winners[0].best_score == "accurate"
+
+
+@pytest.mark.asyncio
+async def test_google_provider_cache_uses_cached_context_marker():
+    config = _config(max_iterations=1, threshold=100)
+    config.provider_cache.enabled = True
+    config.target_model = ModelSpec(provider="google", model_id="gemini-test", role="target")
+
+    class CachedProvider:
+        def __init__(self):
+            self.cached_content = []
+            self.calls = []
+
+        async def create_context_cache(self, content, ttl_seconds):
+            self.cached_content.append((content, ttl_seconds))
+            return "cachedContents/case-1"
+
+        async def complete_with_cached_context(self, prompt, params, cache_id):
+            self.calls.append((prompt, cache_id))
+            return CompletionResult(text="ok", tokens_in=10, cached_tokens_in=7, tokens_out=1)
+
+        async def complete(self, prompt, params):
+            raise AssertionError("cached context path should be used")
+
+    provider = CachedProvider()
+    optimizer = Optimizer(
+        config,
+        target_provider=provider,
+        reasoning_provider=FakeProvider(),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    iteration = await optimizer.validate(
+        Prompt(template="Responda: {input}", variables=["input"]),
+        _gabarito(),
+    )
+
+    assert iteration.score == 100
+    assert provider.cached_content == [("Retorne ok", 3600)]
+    assert provider.calls[0][1] == "cachedContents/case-1"
+    assert "Retorne ok" not in provider.calls[0][0]
+    assert iteration.verdicts[0].execution.cached_tokens_in == 7

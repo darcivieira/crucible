@@ -40,6 +40,7 @@ uv run crucible init ./my-prompt
 uv run crucible validate --prompt ./my-prompt/prompt.txt --gabarito ./my-prompt/gabarito.yaml --config ./my-prompt/config.yaml
 uv run crucible estimate-cost --config ./my-prompt/config.yaml
 uv run crucible optimize --config ./my-prompt/config.yaml
+uv run crucible compare-models --config ./my-prompt/config.yaml
 uv run crucible serve
 ```
 
@@ -62,6 +63,10 @@ Ele executa o prompt, encontra falhas, pede ao `reasoning_model` um diagnóstico
 gera uma nova versão do prompt e repete até bater threshold, budget ou outro critério
 de parada. A run sempre preserva o melhor prompt encontrado, não necessariamente o
 último.
+
+`compare-models` responde: "qual target entrega melhor qualidade, custo e
+custo-benefício neste gabarito?". Ele usa `comparison_models` no `config.yaml` e
+executa uma iteração por modelo, sem refino.
 
 ## Uso Mínimo Via SDK
 

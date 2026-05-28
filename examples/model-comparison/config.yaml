@@ -1,0 +1,68 @@
+threshold: 95.0
+max_iterations: 1
+max_cost_usd: 2.0
+parallelism: 2
+n_runs_per_case: 1
+
+provider_cache:
+  enabled: false
+  ttl_seconds: 3600
+  cache_inputs: true
+  on_error: fallback
+
+comparison_value_quality_weight: 0.8
+comparison_value_cost_weight: 0.2
+comparison_value_latency_weight: 0.0
+
+comparison_models:
+  - label: gemini-flash
+    model:
+      provider: google
+      model_id: gemini-2.0-flash
+      role: target
+      params:
+        temperature: 0.0
+        max_tokens: 1024
+      cost_per_million_input_tokens_usd: 0.10
+      cost_per_million_cached_input_tokens_usd: 0.025
+      cost_per_million_output_tokens_usd: 0.40
+      output_format:
+        type: json_schema
+        name: legal_classification
+        strict: true
+        schema:
+          type: object
+          additionalProperties: false
+          required: [classification, text_validation]
+          properties:
+            classification:
+              type: string
+              enum: [Prazo, Intimacao, Outro]
+            text_validation:
+              type: string
+  - label: gpt-mini
+    model:
+      provider: openai
+      model_id: gpt-5-mini
+      role: target
+      api_mode: responses
+      params:
+        temperature: 0.0
+        max_tokens: 1024
+      cost_per_million_input_tokens_usd: 0.25
+      cost_per_million_cached_input_tokens_usd: 0.025
+      cost_per_million_output_tokens_usd: 2.00
+      output_format:
+        type: json_schema
+        name: legal_classification
+        strict: true
+        schema:
+          type: object
+          additionalProperties: false
+          required: [classification, text_validation]
+          properties:
+            classification:
+              type: string
+              enum: [Prazo, Intimacao, Outro]
+            text_validation:
+              type: string

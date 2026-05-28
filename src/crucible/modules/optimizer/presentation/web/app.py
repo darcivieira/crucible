@@ -296,8 +296,8 @@ async def _form_values(request: Request) -> dict[str, str]:
 
 def _run_request_from_form(values: Mapping[str, str]) -> RunTaskRequest:
     mode = values.get("mode", "optimize")
-    if mode not in {"validate", "optimize"}:
-        raise ValueError("Modo deve ser validate ou optimize.")
+    if mode not in {"validate", "optimize", "compare"}:
+        raise ValueError("Modo deve ser validate, optimize ou compare.")
     try:
         prompt = Prompt(template=_read_value(values, "prompt"), variables=["input"])
         gabarito = Gabarito.model_validate(yaml.safe_load(_read_value(values, "gabarito")))
@@ -421,6 +421,7 @@ def _templates() -> Environment:
     env.filters["stop_label"] = stop_reason_label
     env.filters["mode_label"] = run_mode_label
     env.filters["pretty_json"] = _pretty_json
+    env.globals["model_label"] = _model_label
     return env
 
 
@@ -434,6 +435,12 @@ def _money(value: float | None) -> str:
 
 def _percent(value: float | None) -> str:
     return "-" if value is None else f"{value * 100:.0f}%"
+
+
+def _model_label(model: Any | None) -> str:
+    if model is None:
+        return "-"
+    return f"{model.provider}/{model.model_id}"
 
 
 def _pretty_json(value: Any) -> str:
@@ -703,8 +710,9 @@ _TEMPLATES: Mapping[str, str] = {
         <select name="mode">
           <option value="optimize" {% if values.mode == 'optimize' %}selected{% endif %}>Optimize</option>
           <option value="validate" {% if values.mode == 'validate' %}selected{% endif %}>Validate</option>
+          <option value="compare" {% if values.mode == 'compare' %}selected{% endif %}>Compare models</option>
         </select>
-        <div class="help">Validate mede o prompt atual. Optimize tenta gerar versões melhores.</div>
+        <div class="help">Validate mede o prompt atual. Optimize tenta gerar versões melhores. Compare executa uma versão por modelo em comparison_models.</div>
       </div>
       <div>
         <label>Prompt path</label>
@@ -811,8 +819,44 @@ _TEMPLATES: Mapping[str, str] = {
 <div class="panel">
   <h2>Próximo passo sugerido</h2>
   <p>{{ hint }}</p>
-  <p class="muted">Target: {{ run.config.target_model.provider }}/{{ run.config.target_model.model_id }} · Reasoning: {{ run.config.reasoning_model.provider }}/{{ run.config.reasoning_model.model_id }}</p>
+  <p class="muted">Target: {{ model_label(run.config.target_model) }} · Reasoning: {{ model_label(run.config.reasoning_model) }}</p>
 </div>
+{% if run.comparison_summary %}
+<div class="metrics">
+  <div class="metric"><span>Melhor score</span><strong>{{ run.comparison_summary.best_score.label }}</strong></div>
+  <div class="metric"><span>Menor custo</span><strong>{{ run.comparison_summary.lowest_cost.label }}</strong></div>
+  <div class="metric"><span>Melhor custo-benefício</span><strong>{{ run.comparison_summary.best_value.label }}</strong></div>
+</div>
+<section class="panel">
+  <h2>Comparação de modelos</h2>
+  <table>
+    <thead><tr><th>Modelo</th><th>Score</th><th>Pass rate</th><th>Custo</th><th>p95</th><th>Cached tokens</th></tr></thead>
+    <tbody>
+    {% for iteration in run.iterations %}
+      <tr>
+        <td>{{ iteration.comparison_label or ("v" ~ iteration.version) }}</td>
+        <td>{{ iteration.score|score }}</td>
+        <td>{{ iteration.score_report.pass_rate|percent }}</td>
+        <td>{{ iteration.score_report.operational.total_cost_usd|money }}</td>
+        <td>{{ "%.0f ms"|format(iteration.score_report.operational.p95_latency_ms) }}</td>
+        <td>{{ iteration.score_report.operational.cached_tokens }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <details>
+    <summary>Vencedores por case</summary>
+    <table>
+      <thead><tr><th>Case</th><th>Score</th><th>Custo</th><th>Custo-benefício</th></tr></thead>
+      <tbody>
+      {% for winner in run.comparison_summary.case_winners %}
+        <tr><td>{{ winner.test_case_id }}</td><td>{{ winner.best_score }}</td><td>{{ winner.lowest_cost }}</td><td>{{ winner.best_value }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</section>
+{% endif %}
 {% if run.task_contract %}
 <div class="panel">
   <h2>Contrato da tarefa</h2>

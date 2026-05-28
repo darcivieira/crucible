@@ -401,8 +401,22 @@ def _summary(run: OptimizationRun) -> RunSummary:
         best_version=best.version if best else None,
         total_cost_usd=run.total_cost_usd,
         iterations_count=len(run.iterations),
-        target_model=f"{run.config.target_model.provider}/{run.config.target_model.model_id}",
-        reasoning_model=f"{run.config.reasoning_model.provider}/{run.config.reasoning_model.model_id}",
+        target_model=_model_label(run.config.target_model)
+        if run.config.target_model is not None
+        else _comparison_label(run),
+        reasoning_model=_model_label(run.config.reasoning_model),
         started_at=run.started_at.isoformat(),
         ended_at=run.ended_at.isoformat() if run.ended_at else None,
     )
+
+
+def _model_label(model) -> str:
+    if model is None:
+        return "-"
+    return f"{model.provider}/{model.model_id}"
+
+
+def _comparison_label(run: OptimizationRun) -> str:
+    if not run.config.comparison_models:
+        return "-"
+    return "comparison:" + ",".join(target.label for target in run.config.comparison_models)

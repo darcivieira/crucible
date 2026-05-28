@@ -89,6 +89,18 @@ uv run crucible estimate-cost --config ./my-prompt/config.yaml
 A estimativa é aproximada. Ela usa uma heurística simples de tokens e os preços
 declarados em cada `ModelSpec`.
 
+## Comparar Modelos
+
+Se você ainda está escolhendo o modelo alvo, configure `comparison_models` e rode:
+
+```bash
+uv run crucible compare-models --config ./my-prompt/config.yaml
+```
+
+Esse comando executa o mesmo prompt contra o mesmo gabarito, uma vez por modelo
+candidato. Ele não otimiza prompt. O objetivo é decidir o melhor target por score,
+custo e custo-benefício antes de iniciar uma run mais cara de `optimize`.
+
 ## Otimizar
 
 ```bash
@@ -142,8 +154,9 @@ http://127.0.0.1:7777
 Na tela inicial você pode abrir `Nova run` para executar pelo navegador.
 
 Use `Validate` quando quiser medir rapidamente o prompt atual. Use `Optimize` quando
-quiser que o Crucible proponha versões melhores. A tela aceita caminhos locais para
-`prompt.txt`, `gabarito.yaml` e `config.yaml`, ou conteúdo colado nos editores.
+quiser que o Crucible proponha versões melhores. Use `Compare` quando quiser avaliar
+os modelos de `comparison_models`. A tela aceita caminhos locais para `prompt.txt`,
+`gabarito.yaml` e `config.yaml`, ou conteúdo colado nos editores.
 
 ## Exportar Artefatos
 
@@ -210,7 +223,8 @@ uv run crucible validate \
 1. Escreva ou importe um gabarito.
 2. Rode `validate` até setup, providers e assertions estarem corretos.
 3. Rode `estimate-cost`.
-4. Rode `optimize`.
-5. Inspecione falhas e regressões no dashboard.
-6. Exporte o melhor prompt e os verdicts.
-7. Versione prompt/gabarito/config, mas não versiona `.crucible/`.
+4. Se houver dúvida sobre o target, rode `compare-models`.
+5. Rode `optimize`.
+6. Inspecione falhas e regressões no dashboard.
+7. Exporte o melhor prompt e os verdicts.
+8. Versione prompt/gabarito/config, mas não versiona `.crucible/`.

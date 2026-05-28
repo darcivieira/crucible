@@ -26,13 +26,9 @@ def write_report(run: OptimizationRun, reports_dir: Path, format: str = "html") 
 
 def render_html_report(run: OptimizationRun) -> str:
     best = run.best_iteration
-    target_model = (
-        f"{html.escape(run.config.target_model.provider)}/"
-        f"{html.escape(run.config.target_model.model_id)}"
-    )
+    target_model = _model_label(run.config.target_model) if run.config.target_model else "-"
     reasoning_model = (
-        f"{html.escape(run.config.reasoning_model.provider)}/"
-        f"{html.escape(run.config.reasoning_model.model_id)}"
+        _model_label(run.config.reasoning_model) if run.config.reasoning_model else "-"
     )
     iteration_rows = "\n".join(
         (
@@ -54,6 +50,7 @@ def render_html_report(run: OptimizationRun) -> str:
         if run.task_contract
         else "{}"
     )
+    comparison = _comparison_html(run)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -80,6 +77,7 @@ def render_html_report(run: OptimizationRun) -> str:
     <span class="metric"><strong>Target:</strong> {target_model}</span>
     <span class="metric"><strong>Reasoning:</strong> {reasoning_model}</span>
   </p>
+  {comparison}
   <h2>Best Iteration</h2>
   <p><strong>Version:</strong> v{best.version if best else "n/a"} |
      <strong>Score:</strong> {best.score if best else 0:.2f}</p>
@@ -104,6 +102,49 @@ def render_html_report(run: OptimizationRun) -> str:
 </body>
 </html>
 """
+
+
+def _comparison_html(run: OptimizationRun) -> str:
+    if run.comparison_summary is None:
+        return ""
+    summary = run.comparison_summary
+    best_score = html.escape(str(summary.best_score.label))
+    lowest_cost = html.escape(str(summary.lowest_cost.label))
+    best_value = html.escape(str(summary.best_value.label))
+    rows = "\n".join(
+        (
+            "<tr>"
+            f"<td>{html.escape(iteration.comparison_label or f'v{iteration.version}')}</td>"
+            f"<td>{iteration.score:.2f}</td>"
+            f"<td>{iteration.score_report.pass_rate:.0%}</td>"
+            f"<td>${iteration.score_report.operational.total_cost_usd:.4f}</td>"
+            f"<td>{iteration.score_report.operational.p95_latency_ms:.0f}</td>"
+            f"<td>{iteration.score_report.operational.cached_tokens}</td>"
+            "</tr>"
+        )
+        for iteration in run.iterations
+    )
+    return f"""
+  <h2>Model Comparison</h2>
+  <p>
+    <span class="metric"><strong>Best score:</strong> {best_score}</span>
+    <span class="metric"><strong>Lowest cost:</strong> {lowest_cost}</span>
+    <span class="metric"><strong>Best value:</strong> {best_value}</span>
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Model</th><th>Score</th><th>Pass rate</th>
+        <th>Cost</th><th>p95 ms</th><th>Cached tokens</th>
+      </tr>
+    </thead>
+    <tbody>{rows}</tbody>
+  </table>
+"""
+
+
+def _model_label(model) -> str:
+    return f"{html.escape(model.provider)}/{html.escape(model.model_id)}"
 
 
 def _iteration_change(iteration: Iteration) -> str:

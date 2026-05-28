@@ -98,6 +98,7 @@ class HttpProvider:
         return CompletionResult(
             text=text,
             tokens_in=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
+            cached_tokens_in=_cached_tokens(usage),
             tokens_out=int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
             finish_reason=choice.get("finish_reason") or "stop",
             raw=payload,
@@ -127,6 +128,16 @@ def _provider_error_message(provider: str, exc: httpx.HTTPError) -> str:
         if body:
             message = f"{message}; response_body={body[:2000]}"
     return message
+
+
+def _cached_tokens(usage: dict[str, Any]) -> int:
+    details = (
+        usage.get("prompt_tokens_details")
+        or usage.get("input_tokens_details")
+        or usage.get("input_token_details")
+        or {}
+    )
+    return int(details.get("cached_tokens") or 0)
 
 
 def responses_text_format(output_format: ModelOutputFormat) -> dict[str, Any] | None:

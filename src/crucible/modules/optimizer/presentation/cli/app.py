@@ -232,8 +232,16 @@ def show_run(run: Annotated[str, typer.Option("--run")] = "latest") -> None:
                 "best_version": best.version if best else None,
                 "best_score": best.score if best else None,
                 "total_cost_usd": loaded.total_cost_usd,
-                "target_model": loaded.config.target_model.model_dump(mode="json"),
-                "reasoning_model": loaded.config.reasoning_model.model_dump(mode="json"),
+                "target_model": (
+                    loaded.config.target_model.model_dump(mode="json")
+                    if loaded.config.target_model
+                    else None
+                ),
+                "reasoning_model": (
+                    loaded.config.reasoning_model.model_dump(mode="json")
+                    if loaded.config.reasoning_model
+                    else None
+                ),
             }
         )
     )
@@ -261,6 +269,28 @@ def compare_runs(
     table.add_row("Cost", f"${left_run.total_cost_usd:.4f}", f"${right_run.total_cost_usd:.4f}")
     table.add_row("Stop reason", str(left_run.stop_reason), str(right_run.stop_reason))
     console.print(table)
+
+
+@app.command("compare-models")
+def compare_models(
+    config: Annotated[Path, typer.Option("--config", "-c")],
+    prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
+    gabarito: Annotated[Path | None, typer.Option("--gabarito", "-g")] = None,
+) -> None:
+    config_dir = config.parent
+    loaded_config = _load_config(config)
+    prompt_path = prompt or config_dir / "prompt.txt"
+    gabarito_path = gabarito or config_dir / "gabarito.yaml"
+    run = asyncio.run(
+        Optimizer(loaded_config).compare_models(
+            _load_prompt(prompt_path),
+            _load_gabarito(gabarito_path),
+        )
+    )
+    _print_comparison(run)
+    report_path = write_report(run, get_settings().reports_dir, "html")
+    console.print(f"Run {run.id} completed: stop_reason={run.stop_reason}")
+    console.print(f"Report: {report_path}")
 
 
 @app.command("estimate-cost")
@@ -358,3 +388,30 @@ def _print_iterations(iterations: list) -> None:
             f"{iteration.score_report.operational.p95_latency_ms:.0f}",
         )
     console.print(table)
+
+
+def _print_comparison(run) -> None:
+    table = Table(title="Model Comparison")
+    table.add_column("Model")
+    table.add_column("Score", justify="right")
+    table.add_column("Pass Rate", justify="right")
+    table.add_column("Cost", justify="right")
+    table.add_column("p95 ms", justify="right")
+    table.add_column("Cached", justify="right")
+    for iteration in run.iterations:
+        table.add_row(
+            iteration.comparison_label or f"v{iteration.version}",
+            f"{iteration.score:.2f}",
+            f"{iteration.score_report.pass_rate:.0%}",
+            f"${iteration.score_report.operational.total_cost_usd:.4f}",
+            f"{iteration.score_report.operational.p95_latency_ms:.0f}",
+            str(iteration.score_report.operational.cached_tokens),
+        )
+    console.print(table)
+    if run.comparison_summary:
+        console.print(
+            "Winners: "
+            f"score={run.comparison_summary.best_score.label}, "
+            f"cost={run.comparison_summary.lowest_cost.label}, "
+            f"value={run.comparison_summary.best_value.label}"
+        )

@@ -28,6 +28,7 @@ def aggregate_score(verdicts: list[Verdict]) -> ScoreReport:
             total_tokens=sum(
                 verdict.execution.tokens_in + verdict.execution.tokens_out for verdict in verdicts
             ),
+            cached_tokens=sum(verdict.execution.cached_tokens_in for verdict in verdicts),
         ),
     )
 

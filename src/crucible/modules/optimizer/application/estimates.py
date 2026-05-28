@@ -10,6 +10,10 @@ from crucible.modules.optimizer.domain.models import (
 
 
 def estimate_cost(prompt: Prompt, gabarito: Gabarito, config: OptimizationConfig) -> CostEstimate:
+    if config.target_model is None:
+        raise ValueError("target_model is required for estimate-cost")
+    if config.reasoning_model is None:
+        raise ValueError("reasoning_model is required for estimate-cost")
     rendered_prompts = [prompt.render(input_text=case.input) for case in gabarito.cases]
     target_input_tokens_per_iteration = sum(_rough_tokens(item) for item in rendered_prompts)
     target_output_tokens_per_iteration = len(gabarito.cases) * config.target_model.params.max_tokens

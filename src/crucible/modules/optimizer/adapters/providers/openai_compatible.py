@@ -2,6 +2,7 @@ from typing import Any
 
 from crucible.modules.optimizer.adapters.providers.base_http import (
     HttpProvider,
+    _cached_tokens,
     responses_text_format,
 )
 from crucible.modules.optimizer.domain.models import CompletionResult, ModelParams
@@ -42,6 +43,7 @@ class OpenAIAdapter(HttpProvider):
         return CompletionResult(
             text=text,
             tokens_in=int(usage.get("input_tokens") or 0),
+            cached_tokens_in=_cached_tokens(usage),
             tokens_out=int(usage.get("output_tokens") or 0),
             finish_reason=payload.get("status") or "stop",
             raw=payload,

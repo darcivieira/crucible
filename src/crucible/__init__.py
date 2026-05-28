@@ -14,6 +14,8 @@ from crucible.modules.optimizer.domain.assertions import (
     Regex,
 )
 from crucible.modules.optimizer.domain.models import (
+    ComparisonSummary,
+    ComparisonTarget,
     ContractRule,
     CostEstimate,
     Gabarito,
@@ -22,6 +24,7 @@ from crucible.modules.optimizer.domain.models import (
     ModelSpec,
     OptimizationConfig,
     Prompt,
+    ProviderCacheConfig,
     ProviderRateLimit,
     RefinementRepairAttempt,
     TaskContract,
@@ -30,6 +33,8 @@ from crucible.modules.optimizer.domain.models import (
 
 __all__ = [
     "Contains",
+    "ComparisonSummary",
+    "ComparisonTarget",
     "ContractRule",
     "CostEstimate",
     "EmbeddingSimilarity",
@@ -49,6 +54,7 @@ __all__ = [
     "PluginAssertion",
     "Prompt",
     "ProviderRateLimit",
+    "ProviderCacheConfig",
     "RefinementRepairAttempt",
     "PydanticModel",
     "Regex",

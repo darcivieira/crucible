@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from time import monotonic
+from typing import Any
 
 from crucible.modules.optimizer.domain.models import (
     CompletionResult,
@@ -23,6 +24,23 @@ class RateLimitedProvider:
         async with self._semaphore:
             await self._wait_for_rpm_slot()
             return await self.provider.complete(prompt, params)
+
+    async def create_context_cache(self, content: str, ttl_seconds: int) -> str:
+        provider: Any = self.provider
+        async with self._semaphore:
+            await self._wait_for_rpm_slot()
+            return await provider.create_context_cache(content, ttl_seconds)
+
+    async def complete_with_cached_context(
+        self,
+        prompt: str,
+        params: ModelParams,
+        cache_id: str,
+    ) -> CompletionResult:
+        provider: Any = self.provider
+        async with self._semaphore:
+            await self._wait_for_rpm_slot()
+            return await provider.complete_with_cached_context(prompt, params, cache_id)
 
     async def _wait_for_rpm_slot(self) -> None:
         if self.limits.requests_per_minute is None:

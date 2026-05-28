@@ -65,6 +65,113 @@ async def test_field_by_field_returns_partial_score():
     )
     assert result.passed is False
     assert result.score == 0.5
+    assert result.detail["field_results"]["a"]["type"] == "exact"
+
+
+@pytest.mark.asyncio
+async def test_field_by_field_supports_per_field_assertions():
+    assertion = FieldByField.model_validate(
+        {
+            "type": "field_by_field",
+            "weights": {"classification": 95, "text_validation": 5},
+            "field_assertions": {
+                "classification": {"type": "exact"},
+                "text_validation": {"type": "normalized_exact", "case_sensitive": False},
+            },
+        }
+    )
+
+    result = await assertion.evaluate(
+        '{"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}',
+        '{"classification": "Prazo", "text_validation": "  intime-se   no PRAZO de 5 dias. "}',
+        AssertionContext(),
+    )
+
+    assert result.passed is True
+    assert result.score == 1.0
+    assert result.detail["field_results"]["text_validation"]["type"] == "normalized_exact"
+
+
+@pytest.mark.asyncio
+async def test_field_by_field_scores_qualitative_fields_with_weights():
+    assertion = FieldByField.model_validate(
+        {
+            "type": "field_by_field",
+            "weights": {"classification": 95, "text_validation": 5},
+            "field_assertions": {
+                "classification": {"type": "exact"},
+                "text_validation": {"type": "contains"},
+            },
+        }
+    )
+
+    result = await assertion.evaluate(
+        '{"classification": "Prazo", "text_validation": "prazo de 5 dias"}',
+        '{"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}',
+        AssertionContext(),
+    )
+
+    assert result.passed is True
+    assert result.score == 1.0
+
+
+@pytest.mark.asyncio
+async def test_field_by_field_uses_embedding_similarity_per_field():
+    class Embedder:
+        async def embed(self, texts):
+            return [[1.0, 0.0], [1.0, 0.0]]
+
+    assertion = FieldByField.model_validate(
+        {
+            "type": "field_by_field",
+            "field_assertions": {
+                "text_validation": {"type": "embedding_similarity", "threshold": 0.9}
+            },
+        }
+    )
+
+    result = await assertion.evaluate(
+        '{"text_validation": "prazo de 5 dias"}',
+        '{"text_validation": "o prazo concedido foi de cinco dias"}',
+        AssertionContext(embedding_provider=Embedder()),
+    )
+
+    assert result.passed is True
+    assert result.detail["field_results"]["text_validation"]["type"] == "embedding_similarity"
+
+
+@pytest.mark.asyncio
+async def test_field_by_field_llm_judge_receives_original_input():
+    class Judge:
+        prompts = []
+
+        async def complete(self, prompt, params):
+            self.prompts.append(prompt)
+            return CompletionResult(text='{"score": 0.9, "passed": true, "rationale": "ok"}')
+
+    judge = Judge()
+    assertion = FieldByField.model_validate(
+        {
+            "type": "field_by_field",
+            "field_assertions": {
+                "text_validation": {
+                    "type": "llm_judge",
+                    "threshold": 0.8,
+                    "rubric": "Verifique se o trecho existe no input original.",
+                }
+            },
+        }
+    )
+
+    result = await assertion.evaluate(
+        '{"text_validation": "prazo de 5 dias"}',
+        '{"text_validation": "prazo de 5 dias"}',
+        AssertionContext(judge_provider=judge, input_text="Intime-se no prazo de 5 dias."),
+    )
+
+    assert result.passed is True
+    assert "Input original" in judge.prompts[0]
+    assert "Intime-se no prazo de 5 dias." in judge.prompts[0]
 
 
 @pytest.mark.asyncio

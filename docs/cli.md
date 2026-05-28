@@ -6,6 +6,39 @@ Todos os comandos são executados com:
 uv run crucible <comando>
 ```
 
+## Fluxos Mais Comuns
+
+Validar um prompt:
+
+```bash
+uv run crucible validate \
+  --prompt prompt.txt \
+  --gabarito gabarito.yaml \
+  --config config.yaml
+```
+
+Comparar modelos:
+
+```bash
+uv run crucible compare-models \
+  --prompt prompt.txt \
+  --gabarito gabarito.yaml \
+  --config config.yaml
+```
+
+Otimizar e abrir relatório:
+
+```bash
+uv run crucible optimize --config config.yaml
+uv run crucible report --run latest --format html
+```
+
+Abrir o dashboard:
+
+```bash
+uv run crucible serve
+```
+
 ## `init`
 
 Cria um projeto inicial.

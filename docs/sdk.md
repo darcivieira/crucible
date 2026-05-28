@@ -2,6 +2,41 @@
 
 O SDK é async-first.
 
+## Exemplo Completo
+
+```python
+import asyncio
+
+from crucible import Gabarito, OptimizationConfig, Optimizer, Prompt
+
+
+async def main():
+    config = OptimizationConfig.model_validate({
+        "target_model": {"provider": "fake", "model_id": "target", "role": "target"},
+        "reasoning_model": {"provider": "fake", "model_id": "reasoning", "role": "reasoning"},
+    })
+    prompt = Prompt(template="Responda apenas: {input}", variables=["input"])
+    gabarito = Gabarito.model_validate({
+        "name": "sample",
+        "version": "v1",
+        "cases": [
+            {
+                "id": "case-001",
+                "input": "ok",
+                "expected_output": "ok",
+                "assertion": {"type": "contains"},
+            }
+        ],
+    })
+
+    optimizer = Optimizer(config)
+    iteration = await optimizer.validate(prompt, gabarito)
+    print(f"Score: {iteration.score:.2f}")
+
+
+asyncio.run(main())
+```
+
 ## Otimização Básica
 
 ```python
@@ -25,7 +60,20 @@ print(iteration.score)
 ## Comparar Modelos
 
 ```python
-run = await optimizer.compare_models(prompt, gabarito)
+comparison_config = OptimizationConfig.model_validate({
+    "comparison_models": [
+        {
+            "label": "fake-a",
+            "model": {"provider": "fake", "model_id": "target-a", "role": "target"},
+        },
+        {
+            "label": "fake-b",
+            "model": {"provider": "fake", "model_id": "target-b", "role": "target"},
+        },
+    ]
+})
+
+run = await Optimizer(comparison_config).compare_models(prompt, gabarito)
 print(run.comparison_summary.best_score.label)
 print(run.comparison_summary.lowest_cost.label)
 print(run.comparison_summary.best_value.label)

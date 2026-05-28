@@ -210,6 +210,68 @@ O `passed` do caso continua sendo estrito: em `field_by_field`, uma resposta par
 normalmente recebe score parcial, mas só passa quando todos os campos esperados batem.
 Por isso é possível ter `global_score` subindo enquanto o `pass_rate` segue baixo.
 
+#### Assertions Por Campo
+
+Por padrão, todo campo em `field_by_field` usa comparação exata. Isso preserva
+compatibilidade com gabaritos antigos:
+
+```yaml
+assertion:
+  type: field_by_field
+```
+
+equivale a:
+
+```yaml
+assertion:
+  type: field_by_field
+  field_assertions:
+    classification:
+      type: exact
+    text_validation:
+      type: exact
+```
+
+Quando um campo fechado deve ser avaliado de forma quantitativa e outro campo aberto
+precisa de avaliação qualitativa, configure `field_assertions`:
+
+```yaml
+expected_output: |
+  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+assertion:
+  type: field_by_field
+  weights:
+    classification: 95
+    text_validation: 5
+  field_assertions:
+    classification:
+      type: exact
+    text_validation:
+      type: llm_judge
+      threshold: 0.8
+      rubric: >
+        Verifique se o trecho extraído está presente no input original e se é
+        semanticamente equivalente ao valor esperado. Penalize inferências,
+        paráfrases inventadas ou trechos que não existam no texto fonte.
+```
+
+Tipos disponíveis por campo:
+
+- `exact`: igualdade exata do valor parseado.
+- `normalized_exact`: compara texto normalizando espaços; por padrão ignora caixa.
+- `contains`: aceita quando expected contém actual ou actual contém expected.
+- `embedding_similarity`: compara o campo por similaridade de embeddings.
+- `llm_judge`: usa judge com rubrica específica do campo.
+
+Para `llm_judge`, o Crucible envia ao judge o valor esperado, o valor extraído e o
+input original do caso. Isso permite avaliar se uma evidência textual realmente veio
+do texto fonte, não apenas se parece semanticamente plausível.
+
+Em `validate` e `optimize`, quando `judge_models` não é informado, o
+`reasoning_model` pode servir como judge padrão. Em `compare`, `reasoning_model` não
+é obrigatório; portanto, se algum `field_assertions.*.type` for `llm_judge`, configure
+`judge_model` ou `judge_models` explicitamente.
+
 Isso muda o score do caso, não cria uma métrica global separada por chave. Hoje o
 threshold global do `config.yaml` continua avaliando o score agregado da run. Para
 destacar o desempenho por campo nos reports, use tags complementares ou exporte os

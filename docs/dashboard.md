@@ -14,6 +14,24 @@ URL padrão:
 http://127.0.0.1:7777
 ```
 
+Para escolher host e porta:
+
+```bash
+uv run crucible serve --host 0.0.0.0 --port 7777
+```
+
+Passo a passo:
+
+1. Rode `uv run crucible serve`.
+2. Abra `http://127.0.0.1:7777`.
+3. Clique em `Nova run`.
+4. Escolha `Validate`, `Optimize` ou `Compare`.
+5. Informe caminhos locais ou cole o conteúdo de `prompt`, `gabarito` e `config`.
+6. Acompanhe a task até terminar.
+7. Abra a run para ver score, verdicts, diffs, prompts e relatórios.
+
+O dashboard é local e não tem autenticação. Use em rede confiável.
+
 ## O Que Mudou
 
 O dashboard deixou de ser apenas uma listagem read-only. Ele agora também ajuda a

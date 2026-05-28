@@ -7,6 +7,8 @@ Use este índice conforme o que você precisa fazer.
 
 ## Primeiros Passos
 
+- [Guia do usuário](user-guide.md): explicação prática para criar, validar,
+  comparar, otimizar e inspecionar prompts.
 - [Quickstart](quickstart.md): crie um projeto, rode uma otimização e inspecione os
   resultados.
 - [Tutorial end-to-end](tutorials/customer-support-end-to-end.md): fluxo completo de

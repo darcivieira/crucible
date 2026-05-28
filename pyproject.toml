@@ -1,5 +1,5 @@
 [project]
-name = "crucible"
+name = "crucible-prompt-ai"
 version = "0.1.0"
 description = "Prompt optimization framework driven by empirical gabaritos."
 readme = "README.md"

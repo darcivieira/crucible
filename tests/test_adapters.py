@@ -1,6 +1,8 @@
+import httpx
 import pytest
 
 from crucible import ModelOutputFormat, ModelSpec
+from crucible.core.exceptions import ProviderError
 from crucible.modules.optimizer.adapters.cache import JsonlExecutionCache, execution_cache_key
 from crucible.modules.optimizer.adapters.importers import (
     import_dspy,
@@ -8,6 +10,7 @@ from crucible.modules.optimizer.adapters.importers import (
     import_promptfoo,
 )
 from crucible.modules.optimizer.adapters.providers.anthropic import AnthropicAdapter
+from crucible.modules.optimizer.adapters.providers.base_http import _response_json
 from crucible.modules.optimizer.adapters.providers.factory import ModelProviderFactory
 from crucible.modules.optimizer.adapters.providers.google import GoogleAdapter
 from crucible.modules.optimizer.adapters.providers.llamacpp import LlamaCppAdapter
@@ -25,6 +28,18 @@ from crucible.modules.optimizer.domain.models import (
 
 def _spec(provider="ollama"):
     return ModelSpec(provider=provider, model_id="m", role="target")
+
+
+def test_response_json_reports_non_json_body():
+    response = httpx.Response(200, text="<html>bad gateway</html>")
+
+    with pytest.raises(ProviderError) as exc:
+        _response_json(response, provider="google", model_id="gemini", path="/generateContent")
+
+    message = str(exc.value)
+    assert "google/gemini returned non-JSON response" in message
+    assert "status=200" in message
+    assert "bad gateway" in message
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from time import perf_counter
 from typing import Any
 
@@ -49,7 +50,12 @@ class HttpProvider:
                             json=self.payload(prompt, params),
                         )
                         response.raise_for_status()
-                        payload = response.json()
+                        payload = _response_json(
+                            response,
+                            provider=self.spec.provider,
+                            model_id=self.spec.model_id,
+                            path=self.path,
+                        )
                         break
                 except httpx.HTTPStatusError as exc:
                     last_error = exc
@@ -128,6 +134,31 @@ def _provider_error_message(provider: str, exc: httpx.HTTPError) -> str:
         if body:
             message = f"{message}; response_body={body[:2000]}"
     return message
+
+
+def _response_json(
+    response: httpx.Response,
+    provider: str,
+    model_id: str,
+    path: str,
+) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except json.JSONDecodeError as exc:
+        body = response.text.strip()
+        message = (
+            f"{provider}/{model_id} returned non-JSON response from {path}: "
+            f"status={response.status_code}"
+        )
+        if body:
+            message = f"{message}; response_body={body[:2000]}"
+        raise ProviderError(message) from exc
+    if not isinstance(payload, dict):
+        raise ProviderError(
+            f"{provider}/{model_id} returned JSON {type(payload).__name__} from {path}, "
+            "expected object"
+        )
+    return payload
 
 
 def _cached_tokens(usage: dict[str, Any]) -> int:

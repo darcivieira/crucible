@@ -264,6 +264,52 @@ async def test_llm_judge_parses_json_response():
 
 
 @pytest.mark.asyncio
+async def test_llm_judge_turns_empty_response_into_failed_result():
+    class Judge:
+        async def complete(self, prompt, params):
+            return CompletionResult(text="")
+
+    result = await LLMJudge(rubric="compare").evaluate(
+        "expected",
+        "actual",
+        AssertionContext(judge_provider=Judge()),
+    )
+
+    assert result.passed is False
+    assert result.score == 0.0
+    judge_detail = result.detail["judges"][0]
+    assert judge_detail["error"] == "judge_returned_empty_response"
+    assert judge_detail["error_type"] == "ValueError"
+
+
+@pytest.mark.asyncio
+async def test_field_by_field_llm_judge_failure_does_not_raise():
+    class Judge:
+        async def complete(self, prompt, params):
+            raise RuntimeError("provider unavailable")
+
+    assertion = FieldByField.model_validate(
+        {
+            "type": "field_by_field",
+            "field_assertions": {"tasks": {"type": "llm_judge", "threshold": 0.7}},
+        }
+    )
+
+    result = await assertion.evaluate(
+        '{"tasks": [{"title": "A"}]}',
+        '{"tasks": [{"title": "B"}]}',
+        AssertionContext(judge_provider=Judge()),
+    )
+
+    assert result.passed is False
+    assert result.score == 0.0
+    field = result.detail["field_results"]["tasks"]
+    assert field["type"] == "llm_judge"
+    assert field["judges"][0]["error"] == "provider unavailable"
+    assert field["judges"][0]["error_type"] == "RuntimeError"
+
+
+@pytest.mark.asyncio
 async def test_plugin_assertion_uses_registry():
     from crucible.modules.optimizer.plugins.registry import get_plugin_registry
 

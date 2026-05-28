@@ -32,7 +32,7 @@ from crucible.modules.optimizer.application.estimates import estimate_cost
 from crucible.modules.optimizer.application.execution_backends import execution_backend
 from crucible.modules.optimizer.application.multi_objective import update_multi_objective
 from crucible.modules.optimizer.application.reports import write_report
-from crucible.modules.optimizer.domain.assertions import AssertionContext
+from crucible.modules.optimizer.domain.assertions import AssertionContext, AssertionResult
 from crucible.modules.optimizer.domain.models import (
     ComparisonCaseWinner,
     ComparisonSummary,
@@ -56,6 +56,12 @@ from crucible.modules.optimizer.domain.models import (
 )
 from crucible.modules.optimizer.domain.protocols import ExecutionCache, ModelProvider, RunStore
 from crucible.modules.optimizer.domain.scoring import aggregate_score
+
+
+class OptimizationRunError(RuntimeError):
+    def __init__(self, message: str, run_id: str):
+        super().__init__(message)
+        self.run_id = run_id
 
 
 class Optimizer:
@@ -146,18 +152,34 @@ class Optimizer:
         try:
             for index, target in enumerate(self.config.comparison_models):
                 self.config.target_model = target.model
-                self.target_provider = self.provider_factory.get(target.model)
-                iteration = await self._run_iteration(
-                    version=index,
-                    prompt=prompt,
-                    gabarito=gabarito,
-                    previous_verdicts=None,
-                    diagnosis=None,
-                    proposal=None,
-                )
+                try:
+                    self.target_provider = self.provider_factory.get(target.model)
+                    iteration = await self._run_iteration(
+                        version=index,
+                        prompt=prompt,
+                        gabarito=gabarito,
+                        previous_verdicts=None,
+                        diagnosis=None,
+                        proposal=None,
+                    )
+                except Exception as exc:
+                    run.status = "failed"
+                    run.stop_reason = None
+                    run.provider_cache_warnings = self.provider_cache_warnings
+                    run.ended_at = datetime.now(UTC)
+                    await self.store.save_run(run)
+                    raise OptimizationRunError(
+                        "comparison target failed "
+                        f"label={target.label} model={target.model.provider}/"
+                        f"{target.model.model_id}: {exc}",
+                        run.id,
+                    ) from exc
                 iteration.comparison_label = target.label
                 iteration.target_model = target.model
                 run.iterations.append(iteration)
+                run.comparison_summary = comparison_summary(run, self.config)
+                run.provider_cache_warnings = self.provider_cache_warnings
+                await self.store.save_run(run)
         finally:
             self.config.target_model = original_model
             self.target_provider = original_provider
@@ -399,11 +421,22 @@ class Optimizer:
             target_output_schema=target_model.output_format.schema_,
             input_text=test_case.input,
         )
-        assertion = await test_case.assertion.evaluate(
-            test_case.expected_output,
-            execution.actual_output,
-            context,
-        )
+        try:
+            assertion = await test_case.assertion.evaluate(
+                test_case.expected_output,
+                execution.actual_output,
+                context,
+            )
+        except Exception as exc:
+            assertion = AssertionResult(
+                score=0.0,
+                passed=False,
+                detail={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "assertion_type": getattr(test_case.assertion, "type", None),
+                },
+            )
         detail = dict(assertion.detail)
         if run_details:
             detail["runs"] = run_details

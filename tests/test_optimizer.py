@@ -20,12 +20,13 @@ from crucible.modules.optimizer.application.contracts import (
     build_task_contract,
     validate_refinement_against_contract,
 )
-from crucible.modules.optimizer.domain.assertions import FieldByField
+from crucible.modules.optimizer.domain.assertions import FieldByField, PluginAssertion
 from crucible.modules.optimizer.domain.models import (
     CompletionResult,
     ModelOutputFormat,
     RefinementProposal,
 )
+from crucible.modules.optimizer.plugins.registry import get_plugin_registry
 
 
 class MemoryStore:
@@ -60,7 +61,10 @@ class SequencedProvider:
 
     async def complete(self, prompt, params):
         self.prompts.append(prompt)
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 def _config(max_iterations=3, threshold=100):
@@ -110,6 +114,41 @@ async def test_validate_executes_cases_and_scores():
 
     assert iteration.score == 100
     assert iteration.verdicts[0].passed is True
+
+
+@pytest.mark.asyncio
+async def test_validate_turns_assertion_exception_into_failed_verdict():
+    async def raising_assertion(expected, actual, config, context):
+        raise RuntimeError("judge returned invalid json")
+
+    get_plugin_registry().register_assertion("raising-for-optimizer-test", raising_assertion)
+    gabarito = Gabarito(
+        name="sample",
+        version="v1",
+        cases=[
+            CrucibleTestCase(
+                id="case-1",
+                input="Retorne ok",
+                expected_output="ok",
+                assertion=PluginAssertion(name="raising-for-optimizer-test"),
+            )
+        ],
+    )
+    optimizer = Optimizer(
+        _config(),
+        target_provider=FakeProvider(lambda prompt: "ok"),
+        reasoning_provider=FakeProvider(),
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    iteration = await optimizer.validate(Prompt(template="{input}", variables=["input"]), gabarito)
+
+    assert iteration.score == 0
+    assert iteration.verdicts[0].passed is False
+    assert iteration.verdicts[0].assertion_detail["error"] == "judge returned invalid json"
+    assert iteration.verdicts[0].assertion_detail["error_type"] == "RuntimeError"
 
 
 @pytest.mark.asyncio
@@ -699,6 +738,49 @@ async def test_compare_models_records_rankings_and_case_winners():
     assert run.comparison_summary.best_score.label == "accurate"
     assert run.comparison_summary.lowest_cost.label == "cheap"
     assert run.comparison_summary.case_winners[0].best_score == "accurate"
+
+
+@pytest.mark.asyncio
+async def test_compare_models_saves_partial_run_when_target_fails():
+    config = _config(max_iterations=1, threshold=100)
+    config.target_model = None
+    config.reasoning_model = None
+    first = ModelSpec(provider="fake", model_id="first", role="target")
+    broken = ModelSpec(provider="fake", model_id="broken", role="target")
+    config.comparison_models = [
+        ComparisonTarget(label="first", model=first),
+        ComparisonTarget(label="broken", model=broken),
+    ]
+    providers = {
+        "first": SequencedProvider([CompletionResult(text="ok", tokens_in=1, tokens_out=1)]),
+    }
+
+    class Factory:
+        def get(self, spec):
+            if spec.model_id == "broken":
+                raise RuntimeError("provider returned non-JSON")
+            return providers[spec.model_id]
+
+        def get_embedding(self, spec):
+            raise NotImplementedError
+
+    store = MemoryStore()
+    optimizer = Optimizer(
+        config,
+        provider_factory=Factory(),
+        judge_provider=FakeProvider(),
+        store=store,
+        cache=MemoryCache(),
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        await optimizer.compare_models(Prompt(template="{input}", variables=["input"]), _gabarito())
+
+    assert "comparison target failed label=broken model=fake/broken" in str(exc.value)
+    saved = store.runs[-1]
+    assert saved.status == "failed"
+    assert [iteration.comparison_label for iteration in saved.iterations] == ["first"]
+    assert saved.comparison_summary.best_score.label == "first"
 
 
 @pytest.mark.asyncio

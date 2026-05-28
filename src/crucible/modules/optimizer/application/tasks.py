@@ -36,7 +36,8 @@ async def run_task(
         else:
             store.update_task(task_id, "completed", run_id=run.id)
     except Exception as exc:
-        store.update_task(task_id, "failed", error=str(exc))
+        run_id = getattr(exc, "run_id", None) or _latest_failed_run_id(store)
+        store.update_task(task_id, "failed", run_id=run_id, error=str(exc))
 
 
 async def execute_run_request(
@@ -79,6 +80,13 @@ async def validate_as_run(
     )
     await store.save_run(run)
     return run
+
+
+def _latest_failed_run_id(store: SQLiteRunStore) -> str | None:
+    for summary in store.list_runs(limit=5):
+        if summary.status == "failed":
+            return summary.id
+    return None
 
 
 def run_mode_label(mode: str | None) -> str:

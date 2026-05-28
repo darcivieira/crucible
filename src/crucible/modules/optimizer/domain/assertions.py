@@ -507,9 +507,13 @@ class LLMJudge(BaseAssertion):
         params_list = context.judge_params_list or [context.judge_params] * len(providers)
         payloads: list[dict[str, Any]] = []
         for provider, params in zip(providers, params_list, strict=False):
-            payloads.append(await self._judge(provider, params, expected, actual, swapped=False))
+            payloads.append(
+                await self._safe_judge(provider, params, expected, actual, swapped=False)
+            )
             if self.position_swap:
-                payloads.append(await self._judge(provider, params, expected, actual, swapped=True))
+                payloads.append(
+                    await self._safe_judge(provider, params, expected, actual, swapped=True)
+                )
         score = sum(float(payload.get("score", 0.0)) for payload in payloads) / len(payloads)
         passed_votes = sum(
             1 for payload in payloads if bool(payload.get("passed", score >= self.pass_threshold))
@@ -520,6 +524,26 @@ class LLMJudge(BaseAssertion):
             passed=passed,
             detail={"judges": payloads, "passed_votes": passed_votes, "judge_count": len(payloads)},
         )
+
+    async def _safe_judge(
+        self,
+        provider: Any,
+        params: Any,
+        expected: str,
+        actual: str,
+        swapped: bool,
+    ) -> dict[str, Any]:
+        try:
+            return await self._judge(provider, params, expected, actual, swapped)
+        except Exception as exc:
+            return {
+                "score": 0.0,
+                "passed": False,
+                "rationale": "Judge returned an invalid response or failed during evaluation.",
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "swapped": swapped,
+            }
 
     async def _judge(
         self,
@@ -602,4 +626,6 @@ def _cosine(left: list[float], right: list[float]) -> float:
 
 def _parse_judge_payload(text: str) -> dict[str, Any]:
     cleaned = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    if not cleaned:
+        raise ValueError("judge_returned_empty_response")
     return json.loads(cleaned)

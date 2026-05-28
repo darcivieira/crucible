@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from crucible.modules.optimizer.adapters.providers.base_http import HttpProvider
+from crucible.modules.optimizer.adapters.providers.base_http import HttpProvider, _response_json
 from crucible.modules.optimizer.domain.models import CompletionResult, ModelParams
 
 
@@ -31,7 +31,12 @@ class GoogleAdapter(HttpProvider):
                 json=payload,
             )
             response.raise_for_status()
-            data = response.json()
+            data = _response_json(
+                response,
+                provider=self.spec.provider,
+                model_id=self.spec.model_id,
+                path="/v1beta/cachedContents",
+            )
         return str(data["name"])
 
     async def complete_with_cached_context(
@@ -46,7 +51,12 @@ class GoogleAdapter(HttpProvider):
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
             response = await client.post(self.path, headers=self.headers, json=payload)
             response.raise_for_status()
-            data = response.json()
+            data = _response_json(
+                response,
+                provider=self.spec.provider,
+                model_id=self.spec.model_id,
+                path=self.path,
+            )
         result = self.parse(data)
         result.raw["provider_cache_id"] = cache_id
         result.raw["latency_ms"] = (perf_counter() - started) * 1000

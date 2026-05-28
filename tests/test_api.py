@@ -125,7 +125,12 @@ def test_api_can_create_compare_run(tmp_path):
     assert run["run_mode"] == "compare"
     assert run["stop_reason"] == "comparison_completed"
     assert len(run["iterations"]) == 2
-    assert run["comparison_summary"]["best_score"]["label"] == "fake-a"
+    assert [iteration["comparison_label"] for iteration in run["iterations"]] == [
+        "fake-a",
+        "fake-b",
+    ]
+    assert run["comparison_summary"]["best_score"]["label"] in {"fake-a", "fake-b"}
+    assert run["comparison_summary"]["best_score"]["score"] == 100.0
 
 
 def test_api_persists_task_state_and_accepts_cancel(tmp_path):

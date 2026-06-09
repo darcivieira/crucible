@@ -350,6 +350,23 @@ class IterationMemory(BaseModel):
     rejected_refinement_reason: str | None = None
 
 
+class ReasoningTurn(BaseModel):
+    kind: Literal["diagnosis", "refinement", "repair"]
+    iteration_version: int
+    attempt: int | None = None
+    prompt: str
+    raw_response: str = ""
+    parsed_payload: dict[str, Any] = Field(default_factory=dict)
+    errors: list[str] = Field(default_factory=list)
+    violations: list[str] = Field(default_factory=list)
+    accepted: bool | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ReasoningSession(BaseModel):
+    turns: list[ReasoningTurn] = Field(default_factory=list)
+
+
 class Iteration(BaseModel):
     version: int
     prompt: Prompt
@@ -420,6 +437,7 @@ class OptimizationRun(BaseModel):
     validation_scores: dict[str, float] = Field(default_factory=dict)
     comparison_summary: ComparisonSummary | None = None
     provider_cache_warnings: list[str] = Field(default_factory=list)
+    reasoning_session: ReasoningSession = Field(default_factory=ReasoningSession)
     pareto_frontier_versions: list[int] = Field(default_factory=list)
     active_learning_suggestions: list[ActiveLearningSuggestion] = Field(default_factory=list)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

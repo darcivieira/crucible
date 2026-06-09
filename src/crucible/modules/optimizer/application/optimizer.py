@@ -47,6 +47,8 @@ from crucible.modules.optimizer.domain.models import (
     OptimizationConfig,
     OptimizationRun,
     Prompt,
+    ReasoningSession,
+    ReasoningTurn,
     RefinementProposal,
     RefinementRepairAttempt,
     StopReason,
@@ -307,6 +309,7 @@ class Optimizer:
                 failures,
                 run.iterations,
                 task_contract,
+                run.reasoning_session,
             )
             proposal, repair_attempts, violations = await self._refine_until_valid(
                 current_prompt,
@@ -314,6 +317,7 @@ class Optimizer:
                 failures,
                 run.iterations,
                 task_contract,
+                run.reasoning_session,
             )
             iteration.refinement_repair_attempts = repair_attempts
             if proposal is None:
@@ -561,25 +565,30 @@ class Optimizer:
         failures: list[Verdict],
         iterations: list[Iteration],
         task_contract: TaskContract,
+        reasoning_session: ReasoningSession,
     ) -> Diagnosis:
         target_model = _require_target_model(self.config, "optimize")
         reasoning_model = _require_reasoning_model(self.config, "optimize")
         reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        prompt_text = _diagnosis_prompt(
+            prompt,
+            target_model,
+            failures,
+            _memory(iterations),
+            task_contract,
+            _reasoning_session_context(reasoning_session),
+        )
         completion = await reasoning_provider.complete(
-            _diagnosis_prompt(
-                prompt,
-                target_model,
-                failures,
-                _memory(iterations),
-                task_contract,
-            ),
+            prompt_text,
             reasoning_model.params,
         )
+        errors: list[str] = []
         try:
             payload = _json_payload(completion.text)
-        except ValueError:
+        except ValueError as exc:
+            errors.append(str(exc))
             payload = {}
-        return Diagnosis(
+        diagnosis = Diagnosis(
             pattern=str(payload.get("pattern", "Falhas sem padrão estruturado.")),
             hypothesis=str(
                 payload.get("hypothesis", "O prompt atual não especifica a resposta esperada.")
@@ -588,6 +597,17 @@ class Optimizer:
             confidence=_confidence(payload.get("confidence", 0.5)),
             is_model_limitation=bool(payload.get("is_model_limitation", False)),
         )
+        _record_reasoning_turn(
+            reasoning_session,
+            kind="diagnosis",
+            iteration_version=_reasoning_iteration_version(iterations),
+            prompt=prompt_text,
+            raw_response=completion.text,
+            parsed_payload=payload,
+            errors=errors,
+            accepted=not errors,
+        )
+        return diagnosis
 
     async def _refine(
         self,
@@ -596,22 +616,36 @@ class Optimizer:
         failures: list[Verdict],
         iterations: list[Iteration],
         task_contract: TaskContract,
+        reasoning_session: ReasoningSession,
     ) -> RefinementProposal:
         target_model = _require_target_model(self.config, "optimize")
         reasoning_model = _require_reasoning_model(self.config, "optimize")
         reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        prompt_text = _refinement_prompt(
+            prompt,
+            target_model,
+            diagnosis,
+            failures,
+            _memory(iterations),
+            task_contract,
+            _reasoning_session_context(reasoning_session),
+        )
         completion = await reasoning_provider.complete(
-            _refinement_prompt(
-                prompt,
-                target_model,
-                diagnosis,
-                failures,
-                _memory(iterations),
-                task_contract,
-            ),
+            prompt_text,
             reasoning_model.params,
         )
-        return _proposal_from_completion(completion.text, prompt)
+        proposal, payload, errors = _proposal_from_reasoning(completion.text, prompt)
+        _record_reasoning_turn(
+            reasoning_session,
+            kind="refinement",
+            iteration_version=_reasoning_iteration_version(iterations),
+            attempt=1,
+            prompt=prompt_text,
+            raw_response=completion.text,
+            parsed_payload=payload,
+            errors=errors,
+        )
+        return proposal
 
     async def _refine_until_valid(
         self,
@@ -620,6 +654,7 @@ class Optimizer:
         failures: list[Verdict],
         iterations: list[Iteration],
         task_contract: TaskContract,
+        reasoning_session: ReasoningSession,
     ) -> tuple[RefinementProposal | None, list[RefinementRepairAttempt], list[str]]:
         repair_attempts: list[RefinementRepairAttempt] = []
         violations: list[str] = []
@@ -633,6 +668,7 @@ class Optimizer:
                     failures,
                     iterations,
                     task_contract,
+                    reasoning_session,
                 )
             else:
                 proposal = await self._repair_refinement(
@@ -645,11 +681,19 @@ class Optimizer:
                     violations,
                     attempt,
                     max_attempts,
+                    reasoning_session,
                 )
             violations = validate_refinement_against_contract(
                 proposal,
                 prompt,
                 task_contract,
+            )
+            _mark_reasoning_turn_outcome(
+                reasoning_session,
+                kind="refinement" if attempt == 1 else "repair",
+                attempt=attempt,
+                violations=violations,
+                accepted=not violations,
             )
             if not violations:
                 return proposal, repair_attempts, []
@@ -675,26 +719,40 @@ class Optimizer:
         violations: list[str],
         attempt: int,
         max_attempts: int,
+        reasoning_session: ReasoningSession,
     ) -> RefinementProposal:
         target_model = _require_target_model(self.config, "optimize")
         reasoning_model = _require_reasoning_model(self.config, "optimize")
         reasoning_provider = _require_provider(self.reasoning_provider, "reasoning", "optimize")
+        prompt_text = _repair_refinement_prompt(
+            prompt,
+            target_model,
+            diagnosis,
+            failures,
+            _memory(iterations),
+            task_contract,
+            rejected_proposal,
+            violations,
+            attempt,
+            max_attempts,
+            _reasoning_session_context(reasoning_session),
+        )
         completion = await reasoning_provider.complete(
-            _repair_refinement_prompt(
-                prompt,
-                target_model,
-                diagnosis,
-                failures,
-                _memory(iterations),
-                task_contract,
-                rejected_proposal,
-                violations,
-                attempt,
-                max_attempts,
-            ),
+            prompt_text,
             reasoning_model.params,
         )
-        return _proposal_from_completion(completion.text, prompt)
+        proposal, payload, errors = _proposal_from_reasoning(completion.text, prompt)
+        _record_reasoning_turn(
+            reasoning_session,
+            kind="repair",
+            iteration_version=_reasoning_iteration_version(iterations),
+            attempt=attempt,
+            prompt=prompt_text,
+            raw_response=completion.text,
+            parsed_payload=payload,
+            errors=errors,
+        )
+        return proposal
 
     def _stop_reason(self, run: OptimizationRun) -> StopReason | None:
         best = run.best_iteration
@@ -773,6 +831,23 @@ def _proposal_from_completion(text: str, prompt: Prompt) -> RefinementProposal:
         payload = _json_payload(text)
     except ValueError:
         payload = {}
+    return _proposal_from_payload(payload, prompt)
+
+
+def _proposal_from_reasoning(
+    text: str,
+    prompt: Prompt,
+) -> tuple[RefinementProposal, dict[str, Any], list[str]]:
+    errors: list[str] = []
+    try:
+        payload = _json_payload(text)
+    except ValueError as exc:
+        payload = {}
+        errors.append(str(exc))
+    return _proposal_from_payload(payload, prompt), payload, errors
+
+
+def _proposal_from_payload(payload: dict[str, Any], prompt: Prompt) -> RefinementProposal:
     return RefinementProposal(
         new_prompt=str(payload.get("new_prompt", prompt.template)),
         diff_summary=str(payload.get("diff_summary", "reasoning model returned invalid JSON")),
@@ -1046,6 +1121,120 @@ def _memory(iterations: list[Iteration]) -> list[IterationMemory]:
     ]
 
 
+def _reasoning_iteration_version(iterations: list[Iteration]) -> int:
+    if not iterations:
+        return 0
+    return iterations[-1].version
+
+
+def _record_reasoning_turn(
+    session: ReasoningSession,
+    *,
+    kind: str,
+    iteration_version: int,
+    prompt: str,
+    raw_response: str,
+    parsed_payload: dict[str, Any],
+    attempt: int | None = None,
+    errors: list[str] | None = None,
+    violations: list[str] | None = None,
+    accepted: bool | None = None,
+) -> None:
+    session.turns.append(
+        ReasoningTurn(
+            kind=kind,  # type: ignore[arg-type]
+            iteration_version=iteration_version,
+            attempt=attempt,
+            prompt=prompt,
+            raw_response=raw_response,
+            parsed_payload=parsed_payload,
+            errors=errors or [],
+            violations=violations or [],
+            accepted=accepted,
+        )
+    )
+
+
+def _mark_reasoning_turn_outcome(
+    session: ReasoningSession,
+    *,
+    kind: str,
+    attempt: int,
+    violations: list[str],
+    accepted: bool,
+) -> None:
+    for turn in reversed(session.turns):
+        if turn.kind == kind and turn.attempt == attempt:
+            turn.violations = list(violations)
+            turn.accepted = accepted
+            return
+
+
+def _reasoning_session_context(
+    session: ReasoningSession,
+    *,
+    max_turns: int = 8,
+    max_chars: int = 12_000,
+) -> str:
+    if not session.turns:
+        return "Sem interações anteriores nesta sessão de otimização."
+    items = [_reasoning_turn_summary(turn) for turn in session.turns[-max_turns:]]
+    context = "\n".join(items)
+    if len(context) <= max_chars:
+        return context
+    return context[-max_chars:]
+
+
+def _reasoning_turn_summary(turn: ReasoningTurn) -> str:
+    parts = [
+        f"- {turn.kind} iter={turn.iteration_version}",
+        f"attempt={turn.attempt}" if turn.attempt is not None else "",
+        f"accepted={turn.accepted}" if turn.accepted is not None else "",
+    ]
+    header = " ".join(part for part in parts if part)
+    payload = _compact_payload(turn.parsed_payload)
+    details: list[str] = []
+    if payload:
+        details.append(f"payload={payload}")
+    if turn.violations:
+        details.append(f"violations={turn.violations}")
+    if turn.errors:
+        details.append(f"errors={turn.errors}")
+    return f"{header}: " + "; ".join(details)
+
+
+def _compact_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "pattern",
+        "hypothesis",
+        "category",
+        "new_prompt",
+        "diff_summary",
+        "rationale",
+        "expected_improvement",
+        "risk_of_regression",
+        "confidence",
+    ]
+    compact: dict[str, Any] = {}
+    for key in keys:
+        if key in payload:
+            compact[key] = _truncate_payload_value(payload[key])
+    return compact
+
+
+def _truncate_payload_value(value: Any, max_chars: int = 600) -> Any:
+    if isinstance(value, str) and len(value) > max_chars:
+        return value[:max_chars] + "...<truncated>"
+    if isinstance(value, list):
+        return [_truncate_payload_value(item, max_chars) for item in value[:5]]
+    if isinstance(value, dict):
+        return {
+            str(key): _truncate_payload_value(item, max_chars)
+            for key, item in list(value.items())[:8]
+        }
+    return value
+
+
 def _json_payload(text: str) -> dict[str, Any]:
     cleaned = text.strip()
     if not cleaned:
@@ -1093,6 +1282,7 @@ def _diagnosis_prompt(
     failures: list[Verdict],
     history: list[IterationMemory],
     task_contract: TaskContract,
+    reasoning_context: str,
 ) -> str:
     target = f"{target_model.provider}/{target_model.model_id}"
     cases = "\n\n".join(
@@ -1112,6 +1302,7 @@ def _diagnosis_prompt(
         f"CONTRATO DA TAREFA (fonte da verdade para preservar comportamento):\n"
         f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
         f"HISTÓRICO:\n{[item.model_dump() for item in history]}\n\n"
+        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
         f"CASOS FALHOS:\n{cases}\n\n"
         "Classifique a falha como erro de classificação, extração literal, formato, "
         "ambiguidade do prompt, limitação do modelo ou possível inconsistência do gabarito. "
@@ -1126,6 +1317,7 @@ def _refinement_prompt(
     failures: list[Verdict],
     history: list[IterationMemory],
     task_contract: TaskContract,
+    reasoning_context: str,
 ) -> str:
     cases = "\n\n".join(
         (
@@ -1145,6 +1337,7 @@ def _refinement_prompt(
         f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
         f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
         f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
+        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
         f"CASOS FALHOS QUE MOTIVAM O REFINO:\n{cases}\n\n"
         "Regras obrigatórias: preserve a intenção do prompt inicial; trate o gabarito "
         "como fonte da verdade quando o prompt for omisso; não transforme extração "
@@ -1168,6 +1361,7 @@ def _repair_refinement_prompt(
     violations: list[str],
     attempt: int,
     max_attempts: int,
+    reasoning_context: str,
 ) -> str:
     cases = "\n\n".join(
         (
@@ -1198,6 +1392,7 @@ def _repair_refinement_prompt(
         f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
         f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
         f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
+        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
         f"CASOS FALHOS QUE MOTIVAM O REPARO:\n{cases}\n\n"
         "Corrija especificamente cada violação. Preserve campos de saída, variáveis, "
         "restrições negativas, regras de extração literal e a fonte da verdade do gabarito. "

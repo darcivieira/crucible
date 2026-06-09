@@ -36,6 +36,7 @@ def test_dashboard_routes(tmp_path):
     assert run.id in index_response.text
     assert detail_response.status_code == 200
     assert "Best prompt" in detail_response.text
+    assert "Baixar PDF" in detail_response.text
     assert diff_response.status_code == 200
     assert "+novo {input}" in diff_response.text
     assert verdicts_response.status_code == 200
@@ -62,6 +63,33 @@ def test_dashboard_shows_comparison_summary(tmp_path):
     assert "Comparação de modelos" in response.text
     assert "Melhor custo-benefício" in response.text
     assert "case" in response.text
+
+
+def test_dashboard_downloads_pdf_report(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    run = _saved_run(store)
+    client = TestClient(create_dashboard_app(store))
+
+    response = client.get(f"/runs/{run.id}/reports/pdf/download")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+    assert f"crucible-{run.id}.pdf" in response.headers["content-disposition"]
+
+
+def test_dashboard_blocks_pdf_download_for_unfinished_run(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    run = _saved_run(store, status="running")
+    client = TestClient(create_dashboard_app(store))
+
+    detail = client.get(f"/runs/{run.id}")
+    response = client.get(f"/runs/{run.id}/reports/pdf/download")
+
+    assert detail.status_code == 200
+    assert "Baixar PDF" not in detail.text
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Run ainda não finalizada"
 
 
 def test_dashboard_new_run_form_creates_validate_task(tmp_path):
@@ -190,7 +218,7 @@ def test_dashboard_returns_404_for_missing_run(tmp_path):
     assert response.status_code == 404
 
 
-def _saved_run(store: SQLiteRunStore) -> OptimizationRun:
+def _saved_run(store: SQLiteRunStore, status: str = "completed") -> OptimizationRun:
     case = CrucibleTestCase(id="case", input="ok", expected_output="ok", assertion=Contains())
     first_verdict = Verdict(
         test_case=case,
@@ -209,6 +237,7 @@ def _saved_run(store: SQLiteRunStore) -> OptimizationRun:
         reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
     )
     run = OptimizationRun(config=config, gabarito_hash="g", initial_prompt_hash="p")
+    run.status = status
     run.iterations.extend(
         [
             Iteration(

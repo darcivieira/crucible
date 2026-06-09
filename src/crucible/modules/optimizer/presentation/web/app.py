@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from jinja2 import DictLoader, Environment, select_autoescape
 from pydantic import ValidationError
 
@@ -234,6 +234,18 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
             run=run,
             format=format,
             path=path,
+        )
+
+    @app.get("/runs/{run_id}/reports/pdf/download")
+    async def download_pdf_report(run_id: str) -> FileResponse:
+        run = await _load_run_or_404(run_store, run_id)
+        if run.status not in {"completed", "failed", "aborted"}:
+            raise HTTPException(status_code=409, detail="Run ainda não finalizada")
+        path = write_report(run, settings.reports_dir, "pdf")
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=f"crucible-{run.id}.pdf",
         )
 
     @app.get("/compare", response_class=HTMLResponse)
@@ -805,6 +817,9 @@ _TEMPLATES: Mapping[str, str] = {
     <a class="button secondary" href="/runs/{{ run.id }}/diff">Diff v0 → best</a>
     <a class="button secondary" href="/runs/{{ run.id }}/regressions">Regressões</a>
     <a class="button secondary" href="/runs/{{ run.id }}/reports/html">Report HTML</a>
+    {% if run.status in ["completed", "failed", "aborted"] %}
+    <a class="button secondary" href="/runs/{{ run.id }}/reports/pdf/download">Baixar PDF</a>
+    {% endif %}
     <a class="button secondary" href="/api/runs/{{ run.id }}">JSON</a>
   </div>
 </div>

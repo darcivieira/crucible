@@ -131,6 +131,12 @@ iteração com o mesmo prompt. Ele envia as violações de volta ao reasoning e 
 nova proposta, até `max_refinement_repair_attempts`. Se nenhuma tentativa produzir
 um prompt válido, a run encerra com `reasoning_failed_to_refine`.
 
+Durante uma run de `optimize`, o Crucible mantém uma sessão local de reasoning.
+Essa sessão é por run, não global. Ela registra diagnósticos, propostas, respostas
+brutas do reasoning, erros de parse e violações de contrato. Nas chamadas seguintes,
+o Crucible envia um resumo desse histórico ao `reasoning_model`, para que ele não
+repita tentativas rejeitadas e preserve decisões anteriores da mesma execução.
+
 Critérios de parada:
 
 - `threshold_reached`: melhor score atingiu o threshold;

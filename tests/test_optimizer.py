@@ -221,6 +221,65 @@ async def test_optimize_returns_best_seen_prompt_after_refinement():
 
 
 @pytest.mark.asyncio
+async def test_optimize_records_reasoning_session_and_injects_context():
+    calls = {"target": 0, "reasoning": 0}
+
+    def target_response(prompt):
+        calls["target"] += 1
+        return "wrong" if calls["target"] == 1 else "ok"
+
+    def reasoning_response(prompt):
+        calls["reasoning"] += 1
+        if calls["reasoning"] == 1:
+            return json.dumps(
+                {
+                    "pattern": "missing exact instruction",
+                    "hypothesis": "prompt is vague",
+                    "category": "INSTRUCTION_AMBIGUITY",
+                    "confidence": 0.8,
+                    "is_model_limitation": False,
+                }
+            )
+        assert "HISTÓRICO DA SESSÃO DE REASONING" in prompt
+        assert "missing exact instruction" in prompt
+        return json.dumps(
+            {
+                "new_prompt": "Responda exatamente ok para: {input}",
+                "diff_summary": "adds exact output",
+                "rationale": "forces expected answer",
+                "expected_improvement": "higher precision",
+                "confidence": 0.9,
+            }
+        )
+
+    reasoning_provider = FakeProvider(reasoning_response)
+    optimizer = Optimizer(
+        _config(max_iterations=3, threshold=100),
+        target_provider=FakeProvider(target_response),
+        reasoning_provider=reasoning_provider,
+        judge_provider=FakeProvider(),
+        store=MemoryStore(),
+        cache=MemoryCache(),
+    )
+
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+
+    assert run.stop_reason == "threshold_reached"
+    assert [turn.kind for turn in run.reasoning_session.turns] == [
+        "diagnosis",
+        "refinement",
+    ]
+    assert run.reasoning_session.turns[0].parsed_payload["pattern"] == (
+        "missing exact instruction"
+    )
+    assert run.reasoning_session.turns[1].parsed_payload["new_prompt"].startswith(
+        "Responda exatamente ok"
+    )
+    assert run.reasoning_session.turns[1].accepted is True
+    assert "HISTÓRICO DA SESSÃO DE REASONING" in reasoning_provider.prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_optimize_normalizes_reasoning_confidence_scales():
     calls = {"target": 0, "reasoning": 0}
 
@@ -535,6 +594,14 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
     assert len(run.iterations) == 2
     assert len(run.iterations[0].refinement_repair_attempts) == 1
     assert run.iterations[1].prompt.template.startswith("Classifique em classification")
+    assert [turn.kind for turn in run.reasoning_session.turns] == [
+        "diagnosis",
+        "refinement",
+        "repair",
+    ]
+    assert run.reasoning_session.turns[1].accepted is False
+    assert run.reasoning_session.turns[1].violations
+    assert run.reasoning_session.turns[2].accepted is True
 
 
 @pytest.mark.asyncio
@@ -561,6 +628,14 @@ async def test_optimize_keeps_current_prompt_when_reasoning_returns_invalid_json
     )
     assert run.best_iteration is not None
     assert run.best_iteration.prompt.template == "{input}"
+    assert [turn.kind for turn in run.reasoning_session.turns] == [
+        "diagnosis",
+        "refinement",
+        "repair",
+    ]
+    assert run.reasoning_session.turns[0].errors == ["empty JSON payload"]
+    assert run.reasoning_session.turns[1].errors == ["empty JSON payload"]
+    assert run.reasoning_session.turns[2].errors == ["empty JSON payload"]
 
 
 @pytest.mark.asyncio

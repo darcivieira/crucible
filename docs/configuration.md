@@ -128,6 +128,22 @@ Use esse sinal para revisar o modelo reasoning, o prompt inicial ou o gabarito. 
 normalmente aparece quando o reasoning insiste em remover uma regra crítica, trocar
 extração literal por explicação inferida, omitir `{input}` ou repetir o mesmo prompt.
 
+## Sessão De Reasoning
+
+Durante `optimize`, cada run cria uma sessão local de reasoning. Ela não é
+compartilhada com outras tasks e não depende de memória nativa do provider. O
+Crucible registra cada diagnóstico, proposta de refino e reparo, incluindo prompt
+enviado ao reasoning, resposta bruta, payload parseado, violações e erros.
+
+Nas próximas chamadas da mesma run, o optimizer injeta um resumo compacto desse
+histórico no prompt do `reasoning_model`. Isso ajuda o modelo a lembrar o que já
+tentou, quais propostas foram rejeitadas e quais violações não deve repetir.
+
+O histórico completo fica salvo no payload da run em `reasoning_session`. Isso é
+útil para auditoria pelo SDK/API/dashboard e para entender por que um refino foi
+aceito ou rejeitado. Não há configuração obrigatória para habilitar esse recurso:
+ele é automático em `optimize` e não é usado em `validate` nem em `compare`.
+
 ## Threshold Global E Métricas Por Campo
 
 `threshold` é aplicado ao score global da run:

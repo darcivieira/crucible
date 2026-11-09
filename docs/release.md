@@ -1,59 +1,58 @@
 # Release
 
-Crucible será distribuído como projeto open source sob licença MIT.
+Crucible will be distributed as open source project under MIT license.
 
-## Versionamento
+## Version
 
-O projeto usa versionamento semântico:
+The project uses semantic versioning:
 
-- `MAJOR`: mudanças incompatíveis de API, formato de storage ou configuração.
-- `MINOR`: novas features compatíveis.
-- `PATCH`: correções compatíveis.
+- `MAJOR`: incompatible API changes, storage format or configuration.
+- `MINOR`: new compatible features.
+- `PATCH`: Compatible fixes.
 
-Releases públicas devem ser criadas como GitHub Release com tag `vX.Y.Z`. A publicação
-no PyPI e nos marketplaces da extensão VSCode é feita por GitHub Actions após os
-testes passarem.
+Public releases should be created as GitHub Release with `vX.Y.Z` tag. Posting in PyPI and VSCode
+extension marketplaces is done by GitHub Actions after the tests have passed.
 
-## Publicação Automática
+## Automatic Publication
 
 Workflows:
 
-- `.github/workflows/ci.yml`: testes, lint, build Python e pacote VSIX em PR/push.
-- `.github/workflows/publish-python.yml`: publica no PyPI em release publicada.
-- `.github/workflows/publish-vscode.yml`: publica a extensão em release publicada.
-- `.github/workflows/publish-docker.yml`: publica imagem Docker no Docker Hub em
-  release/tag versionada ou execução manual.
+- `.github/workflows/ci.yml`: tests, lint, Python build and VSIX package in PR/push.
+- `.github/workflows/publish-python.yml`: publishes in PyPI in published release.
+- `.github/workflows/publish-vscode.yml`: publishes the published release extension.
+- `.github/workflows/publish-docker.yml`: publishes Docker image in Docker Hub in release/tag
+  versioned or manual execution.
 
-Segredos/ambiente esperados:
+Secrets/environment expected:
 
-- PyPI: Trusted Publishing/OIDC configurado para o environment `pypi`.
+- PyPI: Trusted Publishing/OIDC configured for `pypi` environment.
 - VSCode Marketplace: `VSCE_PAT`.
 - Open VSX: `OVSX_PAT`.
-- Docker Hub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` e, opcionalmente,
-  variável de repositório `DOCKERHUB_REPOSITORY`.
+- Docker Hub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` and optionally `DOCKERHUB_REPOSITORY`
+  repository variable.
 
 ## Checklist
 
-1. Atualize `CHANGELOG.md`.
-2. Rode:
+1. Update `CHANGELOG.md`.
+2. Run:
 
 ```bash
 bash scripts/release-check.sh
 ```
 
-3. Rode quickstart com provider real:
+3. Run the quickstart with a real provider:
 
 ```bash
 bash scripts/quickstart-real-provider.sh .crucible-quickstart-real
 ```
 
-Para smoke local sem provider externo:
+For a local smoke test without an external provider:
 
 ```bash
 CRUCIBLE_QUICKSTART_PROVIDER=fake bash scripts/quickstart-real-provider.sh .crucible-quickstart-fake
 ```
 
-4. Opcionalmente rode smoke tests de providers reais:
+4. Optionally run smoke tests from real providers:
 
 ```bash
 CRUCIBLE_RUN_PROVIDER_SMOKE=1 \
@@ -62,16 +61,16 @@ CRUCIBLE_SMOKE_MODEL=gemma3:4b \
 uv run pytest tests/test_provider_smoke.py
 ```
 
-5. Gere tag semver quando estiver pronto:
+5. Create and push the tag when you are ready:
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-## Artefatos Esperados
+## Expected artifacts
 
 - `.crucible/crucible.sqlite`
 - `.crucible/reports/<run-id>.html`
-- diretório do quickstart com `best_prompt.txt`
-- changelog atualizado
+- quickstart directory with `best_prompt.txt`
+- changelog updated

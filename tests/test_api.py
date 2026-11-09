@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from crucible import ComparisonTarget, Contains, Gabarito, ModelSpec, OptimizationConfig, Prompt
+from crucible import Benchmark, ComparisonTarget, Contains, ModelSpec, OptimizationConfig, Prompt
 from crucible import TestCase as CrucibleTestCase
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.presentation.api.app import create_api_app
@@ -11,7 +11,7 @@ def test_api_lists_and_reads_runs(tmp_path):
     client = TestClient(create_api_app(store))
     request = {
         "prompt": Prompt(template="{input}", variables=["input"]).model_dump(mode="json"),
-        "gabarito": Gabarito(
+        "benchmark": Benchmark(
             name="sample",
             version="v1",
             cases=[
@@ -50,7 +50,7 @@ def test_api_can_create_validate_run(tmp_path):
     request = {
         "mode": "validate",
         "prompt": Prompt(template="{input}", variables=["input"]).model_dump(mode="json"),
-        "gabarito": Gabarito(
+        "benchmark": Benchmark(
             name="sample",
             version="v1",
             cases=[
@@ -101,7 +101,7 @@ def test_api_can_create_compare_run(tmp_path):
     request = {
         "mode": "compare",
         "prompt": Prompt(template="{input}", variables=["input"]).model_dump(mode="json"),
-        "gabarito": Gabarito(
+        "benchmark": Benchmark(
             name="sample",
             version="v1",
             cases=[

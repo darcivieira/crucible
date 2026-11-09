@@ -13,7 +13,9 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onCommand:crucible.validate",
     "onCommand:crucible.optimize",
@@ -48,7 +50,7 @@
       },
       {
         "command": "crucible.selectFiles",
-        "title": "Crucible: Select Prompt, Gabarito and Config"
+        "title": "Crucible: Select Prompt, Benchmark and Config"
       }
     ],
     "configuration": {
@@ -69,10 +71,15 @@
           "default": "prompt.txt",
           "description": "Path to prompt file relative to the workspace root."
         },
+        "crucible.benchmarkPath": {
+          "type": "string",
+          "default": "benchmark.yaml",
+          "description": "Path to benchmark file relative to the workspace root."
+        },
         "crucible.gabaritoPath": {
           "type": "string",
-          "default": "gabarito.yaml",
-          "description": "Path to gabarito file relative to the workspace root."
+          "description": "Legacy benchmark path relative to the workspace root.",
+          "deprecationMessage": "Use crucible.benchmarkPath. Existing values remain supported."
         }
       }
     }

@@ -1,99 +1,94 @@
-# Guia: Otimização Com Train/Val/Test
+# Guide: Optimization With Train/Val/Test
 
-Use split quando você vai otimizar repetidamente e quer reduzir overfitting ao
-gabarito.
+Use split when you will repeatedly optimize and want to reduce overfitting to benchmark.
 
-## Por Que Usar
+## Why Use
 
-Sem split, o prompt pode melhorar no conjunto de casos usado para refinamento, mas
-piorar em casos não vistos. Isso é especialmente comum quando o gabarito é grande e
-o reasoning model recebe exemplos de falhas para reescrever o prompt.
+Without split, the prompt can improve in the set of cases used for refinement, but worsen in unseen
+cases. This is especially common when the benchmark is large and the reasoning model receives
+examples of flaws to rewrite the prompt.
 
-Com split:
+With split:
 
-- `train`: usado para otimizar.
-- `val`: mede se o melhor prompt encontrado generaliza para casos que não guiaram a
-  otimização.
-- `test`: mede resultado final em um conjunto segurado.
+- `train`: used to optimize.
+- `val`: measures whether the best prompt found generalizes for cases that did not guide
+  optimization.
+- `test`: measures final result on a held-out set.
 
-Na prática, o `optimize` deixa de usar o gabarito inteiro para aprender. Ele otimiza
-no `train`, escolhe o melhor prompt dessa etapa e só então roda validações separadas
-em `val` e `test`.
+In practice, `optimize` stops using the entire benchmark to learn. It optimizes in `train`, chooses
+the best prompt of this step and only then runs separate validations in `val` and `test`.
 
 ## Config
 
 ```yaml
-use_gabarito_split: true
+use_benchmark_split: true
 train_ratio: 0.7
 val_ratio: 0.15
 ```
 
-Com 1000 casos e essa configuração:
+With 1000 cases and this configuration:
 
 ```text
-train: 700 casos
-val:   150 casos
-test:  150 casos
+train: 700 cases
+val:   150 cases
+test:  150 cases
 ```
 
-O split é determinístico por `case.id`, então repetir a run mantém a divisão. Isso é
-bom para comparação entre execuções, mas exige cuidado: se os IDs estiverem agrupados
-por classe, tribunal, data ou tipo de caso, o split pode ficar enviesado.
+The split is deterministic by `case.id`, so repeating the run keeps the split. This is good for
+comparing executions, but requires caution: if the IDs are grouped by class, court, date or case
+type, the split may get biased.
 
-Exemplo ruim:
+Bad example:
 
 ```text
-publicacao-00001..00300 = Prazo
-publicacao-00301..00600 = Audiência
-publicacao-00601..01000 = Nenhum
+notice-00001..00300 = Deadline
+notice-00301..00600 = Hearing
+notice-00601..01000 = None
 ```
 
-Nesse caso, o `train` pode ver uma distribuição diferente do `val`/`test`. Antes de
-usar split em produção, embaralhe ou intercale os casos no gabarito, mantendo IDs
-estáveis.
+In this case, `train` can see a different distribution from `val`/`test`. Before using split in
+production, shuffle or intercalate the cases in benchmark, keeping IDs stable.
 
-## Comando
+## Command
 
 ```bash
 uv run crucible optimize --config examples/train-val-test/config.yaml
 ```
 
-Também é possível materializar os arquivos de split:
+It is also possible to materialize split files:
 
 ```bash
-uv run crucible split-gabarito \
-  --gabarito gabarito.yaml \
+uv run crucible split-benchmark \
+  --benchmark benchmark.yaml \
   --output-dir ./splits \
   --train 0.7 \
   --val 0.15
 ```
 
-Isso cria gabaritos separados para inspeção, CI ou execução manual. O `optimize` com
-`use_gabarito_split: true` não precisa desses arquivos: ele faz o split em memória.
+This creates separate benchmarks for inspection, CI or manual execution. `optimize` with
+`use_benchmark_split: true` does not need these files: it splits in memory.
 
-## O Que Esperar
+## What to Expect
 
-Ao final, a run registra:
+At the end, the run records:
 
 - `validation_scores.train`
 - `validation_scores.val`
 - `validation_scores.test`
 - `validation_scores.train_val_gap`
 
-Interpretação:
+Interpretation:
 
-- `train` alto e `val` baixo: o prompt provavelmente está overfitando aos exemplos de
-  treino.
-- `train` baixo e `val` baixo: o prompt ainda não aprendeu o comportamento esperado.
-- `train`, `val` e `test` próximos: o prompt tende a generalizar melhor.
-- `test` deve ser olhado como métrica final, não como fonte de exemplos para novo
-  prompt.
+- High `train` and low `val`: the prompt is probably overfitting the training examples.
+- `train` low and `val` low: the prompt has not yet learned the expected behavior.
+- `train`, `val` and `test` nearby: the prompt tends to generalize better.
+- `test` should be looked at as final metric, not as a source of examples for new prompt.
 
-## Quando Não Usar
+## When Not To Use
 
-Evite split quando o gabarito é muito pequeno. O Crucible exige pelo menos 3 casos,
-mas isso é apenas o mínimo técnico. Na prática, use split quando cada conjunto ainda
-tiver diversidade suficiente para representar o problema.
+Avoid split when the benchmark is too small. Crucible requires at least 3 cases, but this is only
+the technical minimum. In practice, use split when each set still has enough diversity to represent
+the problem.
 
-Para depuração inicial de provider, schema e assertion, rode `validate` ou `optimize`
-sem split em um subconjunto pequeno. Depois habilite split para medir generalização.
+For initial debugging of the provider, schema, and assertion, run `validate` or `optimize` without
+splitting on a small subset. Then enable split to measure generalization.

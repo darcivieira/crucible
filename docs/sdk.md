@@ -1,13 +1,13 @@
-# SDK Python
+# Python SDK
 
-O SDK é async-first.
+The SDK is async-first.
 
-## Exemplo Completo
+## Complete Example
 
 ```python
 import asyncio
 
-from crucible import Gabarito, OptimizationConfig, Optimizer, Prompt
+from crucible import Benchmark, OptimizationConfig, Optimizer, Prompt
 
 
 async def main():
@@ -15,8 +15,8 @@ async def main():
         "target_model": {"provider": "fake", "model_id": "target", "role": "target"},
         "reasoning_model": {"provider": "fake", "model_id": "reasoning", "role": "reasoning"},
     })
-    prompt = Prompt(template="Responda apenas: {input}", variables=["input"])
-    gabarito = Gabarito.model_validate({
+    prompt = Prompt(template="Respond with only: {input}", variables=["input"])
+    benchmark = Benchmark.model_validate({
         "name": "sample",
         "version": "v1",
         "cases": [
@@ -30,34 +30,34 @@ async def main():
     })
 
     optimizer = Optimizer(config)
-    iteration = await optimizer.validate(prompt, gabarito)
+    iteration = await optimizer.validate(prompt, benchmark)
     print(f"Score: {iteration.score:.2f}")
 
 
 asyncio.run(main())
 ```
 
-## Otimização Básica
+## Basic Optimization
 
 ```python
-from crucible import Gabarito, Optimizer, OptimizationConfig, Prompt
+from crucible import Benchmark, Optimizer, OptimizationConfig, Prompt
 
 config = OptimizationConfig.model_validate({...})
 prompt = Prompt.from_file("prompt.txt")
-gabarito = Gabarito.from_yaml("gabarito.yaml")
+benchmark = Benchmark.from_yaml("benchmark.yaml")
 
 optimizer = Optimizer(config)
-run = await optimizer.optimize(prompt, gabarito)
+run = await optimizer.optimize(prompt, benchmark)
 ```
 
-## Validar Sem Refinamento
+## Validate Without Refining
 
 ```python
-iteration = await optimizer.validate(prompt, gabarito)
+iteration = await optimizer.validate(prompt, benchmark)
 print(iteration.score)
 ```
 
-## Comparar Modelos
+## Compare Models
 
 ```python
 comparison_config = OptimizationConfig.model_validate({
@@ -73,47 +73,48 @@ comparison_config = OptimizationConfig.model_validate({
     ]
 })
 
-run = await Optimizer(comparison_config).compare_models(prompt, gabarito)
+run = await Optimizer(comparison_config).compare_models(prompt, benchmark)
 print(run.comparison_summary.best_score.label)
 print(run.comparison_summary.lowest_cost.label)
 print(run.comparison_summary.best_value.label)
 ```
 
-Use quando o `config.comparison_models` já contém os targets candidatos e você quer
-uma avaliação única, sem refino, para decidir qual modelo vale promover.
-Nesse fluxo, `target_model` e `reasoning_model` podem ficar ausentes do config.
+Use it when `config.comparison_models` already contains the candidate targets and you want a single
+evaluation without refinement to decide which model is worth promoting. In this stream,
+`target_model` and
+`reasoning_model` may be absent from config.
 
-## Estimar Custo
+## Estimate Cost
 
 ```python
-estimate = optimizer.estimate_cost(prompt, gabarito)
+estimate = optimizer.estimate_cost(prompt, benchmark)
 print(estimate.estimated_total_cost_usd)
 ```
 
-## Gerar Relatório
+## Generate Report
 
 ```python
 path = await optimizer.report(run.id, format="html")
 ```
 
-Formatos suportados:
+Supported formats:
 
 - `html`
 - `json`
 - `pdf`
 
-## Gabarito Programático
+## Create a Benchmark Programmatically
 
 ```python
-from crucible import Contains, Gabarito, TestCase
+from crucible import Contains, Benchmark, TestCase
 
-gabarito = Gabarito(
+benchmark = Benchmark(
     name="smoke",
     version="v1",
     cases=[
         TestCase(
             id="case-001",
-            input="Diga apenas: ok",
+            input="Say only: ok",
             expected_output="ok",
             assertion=Contains(),
             tags=["smoke"],
@@ -122,7 +123,7 @@ gabarito = Gabarito(
 )
 ```
 
-## Injetar Providers Em Testes
+## Inject Providers In Tests
 
 ```python
 from crucible.modules.optimizer.adapters.providers.fake import FakeProvider
@@ -135,7 +136,7 @@ optimizer = Optimizer(
 )
 ```
 
-## Store Ou Cache Customizados
+## Custom Store or Cache
 
 ```python
 from pathlib import Path
@@ -150,7 +151,7 @@ optimizer = Optimizer(
 )
 ```
 
-## Exportar Dados
+## Export Data
 
 ```python
 from pathlib import Path
@@ -162,11 +163,11 @@ export_run(run, Path("verdicts.parquet"), "parquet")
 export_run(run, Path("best_prompt.txt"), "prompt")
 ```
 
-## Carregar Runs
+## Load Runs
 
 ```python
 run = await optimizer.load_run("latest")
 run = await optimizer.load_run("<run-id>")
 ```
 
-`latest` funciona quando o store suporta esse alias, como `SQLiteRunStore`.
+`latest` works when the store supports this alias, such as `SQLiteRunStore`.

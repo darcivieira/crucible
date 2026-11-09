@@ -1,4 +1,5 @@
 from crucible.modules.optimizer.domain.models import (
+    Benchmark,
     ComparisonSummary,
     ComparisonTarget,
     CompletionResult,
@@ -30,6 +31,7 @@ __all__ = [
     "ContractRule",
     "CostEstimate",
     "ExecutionResult",
+    "Benchmark",
     "Gabarito",
     "Iteration",
     "ModelParams",

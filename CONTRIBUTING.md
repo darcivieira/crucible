@@ -1,9 +1,9 @@
 # Contributing
 
-Obrigado por contribuir com o Crucible.
+Thank you for contributing to Crucible.
 
-O projeto é local-first, Python 3.13, com CLI/SDK como interfaces principais. Antes de
-abrir PR, rode os checks locais.
+The project is local-first, Python 3.13, with CLI/SDK as main interfaces. Before opening PR, run
+local checks.
 
 ## Setup
 
@@ -22,33 +22,42 @@ npm --prefix vscode-extension run compile
 npm --prefix vscode-extension run package
 ```
 
-Ou rode o pacote principal de release:
+Or run the main release checks:
 
 ```bash
 bash scripts/release-check.sh
 ```
 
-## Como Propor Mudanças
+## How to Propose Changes
 
-1. Abra uma issue se a mudança for grande ou alterar comportamento público.
-2. Mantenha PRs focados.
-3. Adicione ou ajuste testes para comportamento novo.
-4. Atualize documentação e exemplos quando a UX mudar.
-5. Não inclua `.crucible/`, reports locais, credenciais ou outputs com dados sensíveis.
+1. Open an issue if the change is large or changes public behavior.
+2. Keep PRs focused.
+3. Add or adjust tests for new behavior.
+4. Update documentation and examples when UX changes.
+5. Do not include `.crucible/`, local reports, credentials or outputs with sensitive data.
 
-## Estilo De Arquitetura
+## Architecture Style
 
-- Domínio não conhece CLI, FastAPI, SQLite ou HTTP.
-- Presentation é fina: parseia input e chama application/adapters.
-- Providers convertem payloads externos para `CompletionResult`.
-- Assertions devem ser testáveis sem chamada externa sempre que possível.
+- Domain does not know CLI, FastAPI, SQLite or HTTP.
+- Presentation stays thin: it parses input and calls application/adapters.
+- Providers convert external payloads to `CompletionResult`.
+- Assertions must be testable without external call whenever possible.
 
-## Commits E Versão
+## Commits and Version
 
-O projeto usa versionamento semântico:
+The project uses semantic versioning:
 
-- patch: bugfix compatível;
-- minor: nova feature compatível;
-- major: quebra de API/contrato.
+- patch: compatible bugfix;
+- minor: new compatible feature;
+- major: breaking API/contract change.
 
-Versões públicas são publicadas por GitHub Release/tag `vX.Y.Z`.
+Public versions are published by GitHub Release/tag `vX.Y.Z`.
+
+## Language
+
+Use English for code identifiers, comments, docstrings, prompts, interface text,
+examples, tests, and documentation. Keep documentation and examples consistent with
+the public SDK, CLI, and API names.
+
+Legacy API identifiers and multilingual input-matching vocabulary may remain as
+compatibility data. Keep explanations and primary documentation in English.

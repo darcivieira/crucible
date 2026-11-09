@@ -19,6 +19,6 @@ async def test_live_provider_smoke():
         ModelSpec(provider=provider_name, model_id=model_id, role="target")  # type: ignore[arg-type]
     )
 
-    result = await provider.complete("Responda apenas: ok", ModelParams(max_tokens=8))
+    result = await provider.complete("Respond with only: ok", ModelParams(max_tokens=8))
 
     assert result.text.strip()

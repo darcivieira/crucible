@@ -1,22 +1,22 @@
-# Importadores E Exports
+# Importers and Exports
 
-## Importadores
+## Importers
 
-Importadores convertem exemplos externos para `Gabarito`.
+Importers convert external examples to `Benchmark`.
 
-Comando:
+Command:
 
 ```bash
-uv run crucible import-gabarito --source <source> --input <file> --output gabarito.yaml
+uv run crucible import-benchmark --source <source> --input <file> --output benchmark.yaml
 ```
 
-Sources suportados:
+Supported Sources:
 
 - `jsonl`
 - `promptfoo`
 - `langsmith`
 - `dspy`
-- sources registrados por plugin
+- Sources registered by plugin
 
 ## JSONL
 
@@ -27,15 +27,15 @@ Input:
 {"id":"case-002","question":"2+2","answer":"4"}
 ```
 
-Comando:
+Command:
 
 ```bash
-uv run crucible import-gabarito --source jsonl --input cases.jsonl --output gabarito.yaml
+uv run crucible import-benchmark --source jsonl --input cases.jsonl --output benchmark.yaml
 ```
 
 ## Promptfoo
 
-Formato mínimo suportado:
+Minimal format supported:
 
 ```yaml
 tests:
@@ -46,15 +46,15 @@ tests:
         value: world
 ```
 
-Comando:
+Command:
 
 ```bash
-uv run crucible import-gabarito --source promptfoo --input promptfoo.yaml --output gabarito.yaml
+uv run crucible import-benchmark --source promptfoo --input promptfoo.yaml --output benchmark.yaml
 ```
 
-## LangSmith E DSPy
+## LangSmith and DSPy
 
-Formato JSON esperado:
+JSON format expected:
 
 ```json
 {
@@ -64,7 +64,7 @@ Formato JSON esperado:
 }
 ```
 
-Listas também são aceitas:
+Lists are also accepted:
 
 ```json
 [
@@ -72,21 +72,21 @@ Listas também são aceitas:
 ]
 ```
 
-## Limitações Dos Importadores
+## Importer Limitations
 
-Os importadores são pragmáticos. Eles normalizam formatos comuns, mas ainda não
-cobrem todas as variações de Promptfoo, LangSmith ou DSPy.
+Importers are pragmatic. They normalize common formats, but do not yet cover all variations of
+Promptfoo, LangSmith or DSPy.
 
-Para migração estrita, adicione testes com fixtures reais do formato de origem.
+For strict migration, add tests with real fixtures of the source format.
 
-Melhorias suportadas atualmente:
+Currently supported improvements:
 
-- Promptfoo aceita `assert` ou `assertions`, lista ou objeto único.
-- Promptfoo reconhece assertions `contains`, `equals`, `regex` e `json_schema`.
-- Tags podem ser lista, string ou mapa booleano.
-- LangSmith/DSPy aceitam `examples`, `data`, `rows`, `trainset`, `devset` e `demos`.
-- Inputs/outputs comuns como `input`, `question`, `query`, `inputs`, `outputs`,
-  `answer`, `expected`, `label`, `x` e `y` são normalizados.
+- Promptfoo accepts `assert` or `assertions`, list or unique object.
+- Promptfoo recognizes assertions `contains`, `equals`, `regex` and `json_schema`.
+- Tags can be list, string or boolean map.
+- LangSmith/DSPy accept `examples`, `data`, `rows`, `trainset`, `devset` and `demos`.
+- Common inputs/outputs such as `input`, `question`, `query`, `inputs`, `outputs`, `answer`,
+  `expected`, `label`, `x` and `y` are standardised.
 
 ## Exports
 
@@ -97,7 +97,7 @@ uv run crucible export --run latest --format prompt --output best_prompt.txt
 uv run crucible export --run latest --format pdf --output report.pdf
 ```
 
-## Colunas CSV E Parquet
+## CSV and Parquet Columns
 
 - `run_id`
 - `iteration`
@@ -114,7 +114,7 @@ uv run crucible export --run latest --format pdf --output report.pdf
 
 ## Reports
 
-Relatórios são gerados com:
+Reports are generated with:
 
 ```bash
 uv run crucible report --run latest --format html
@@ -122,4 +122,4 @@ uv run crucible report --run latest --format json
 uv run crucible report --run latest --format pdf
 ```
 
-O comando `report` escreve em `.crucible/reports/`.
+The `report` command writes in `.crucible/reports/`.

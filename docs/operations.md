@@ -1,8 +1,8 @@
-# Operação
+# Operations
 
-## Estado Local
+## Local State
 
-Crucible escreve em `.crucible/` por padrão:
+Crucible writes in `.crucible/` by default:
 
 ```text
 .crucible/
@@ -12,23 +12,22 @@ Crucible escreve em `.crucible/` por padrão:
   runs/
 ```
 
-Não versione `.crucible/`, exceto se a intenção for versionar artefatos de run.
+Do not commit `.crucible/` unless you intend to version run artifacts.
 
-## Limpeza
+## Cleaning
 
-Limpeza manual:
+Manual cleaning:
 
 ```bash
 rm -rf .crucible/cache
 rm -rf .crucible/reports
 ```
 
-Remova `.crucible/crucible.sqlite` apenas se quiser apagar o histórico indexado de
-runs.
+Remove `.crucible/crucible.sqlite` only if you want to delete the indexed run history.
 
-## Segredos
+## Secrets
 
-Use variáveis de ambiente:
+Use environment variables:
 
 ```bash
 export CRUCIBLE_OPENAI_API_KEY=...
@@ -37,11 +36,11 @@ export CRUCIBLE_GOOGLE_API_KEY=...
 export CRUCIBLE_OPENROUTER_API_KEY=...
 ```
 
-Evite guardar API keys em `config.yaml`.
+Avoid saving API keys in `config.yaml`.
 
-## Controle De Custo
+## Cost Control
 
-Configure sempre:
+Always configure:
 
 ```yaml
 max_cost_usd: 5.0
@@ -49,24 +48,24 @@ max_iterations: 5
 max_wallclock_seconds: 1800
 ```
 
-Rode:
+Run:
 
 ```bash
 uv run crucible estimate-cost --config config.yaml
 ```
 
-antes de runs caras.
+before expensive runs.
 
 ## Rate Limits
 
-Para providers em GPU local:
+For local GPU providers:
 
 ```yaml
 rate_limit:
   max_concurrent: 1
 ```
 
-Para providers cloud:
+For cloud providers:
 
 ```yaml
 rate_limit:
@@ -76,37 +75,37 @@ rate_limit:
   retry_backoff_seconds: 0.5
 ```
 
-## Uso Em CI
+## Use in CI
 
-Fluxo típico:
+Typical flow:
 
 ```bash
 uv sync
-uv run crucible validate --prompt prompt.txt --gabarito gabarito.yaml --config config.yaml
+uv run crucible validate --prompt prompt.txt --benchmark benchmark.yaml --config config.yaml
 uv run crucible report --run latest --format html
 ```
 
-Guarde `.crucible/reports/*.html` como artefato de CI.
+Save `.crucible/reports/*.html` as a CI artifact.
 
-Em CI, prefira assertions determinísticas e seeds fixas quando o provider suportar.
+In CI, prefer deterministic assertions and fixed seeds when the provider supports them.
 
-## Segurança
+## Security
 
-Reports podem conter:
+Reports may contain:
 
 - prompts;
-- inputs de usuário;
+- user inputs;
 - expected outputs;
-- outputs de modelo;
-- racionales de judges.
+- model outputs;
+- judges rationales.
 
-Não publique reports se gabaritos tiverem dados sensíveis.
+Do not publish reports if benchmarks have sensitive data.
 
-## Exposição De API/Dashboard
+## Exposing the API/Dashboard
 
-`crucible serve` e `crucible api` são local-first. Eles não implementam auth.
+`crucible serve` and `crucible api` are local-first. They do not implement auth.
 
-Mantenha o bind em `127.0.0.1` salvo em rede confiável:
+Keep the bind address at `127.0.0.1`, except on a trusted network:
 
 ```bash
 uv run crucible serve --host 127.0.0.1
@@ -115,38 +114,38 @@ uv run crucible api --host 127.0.0.1
 
 ## Troubleshooting
 
-Provider não conecta:
+Provider does not connect:
 
-- verifique API keys;
-- verifique URL do servidor local;
-- rode `validate` antes de `optimize`;
-- reduza `rate_limit.max_concurrent`.
+- check API keys;
+- check local server URL;
+- run `validate` before `optimize`;
+- reduce `rate_limit.max_concurrent`.
 
-Scores instáveis:
+Unstable scores:
 
 - configure `n_runs_per_case: 3`;
-- confira `assertion_detail["runs"]["unstable"]`;
-- reduza temperatura;
-- configure seed quando suportado.
+- check out `assertion_detail["runs"]["unstable"]`;
+- reduce temperature;
+- configure seed when supported.
 
-Score alto com muitos casos falhando:
+Score high with many cases failing:
 
-- verifique se há assertions com score parcial, como `field_by_field`;
-- compare `global_score` com `pass_rate`;
-- se uma chave crítica domina a decisão, documente isso com `field_by_field.weights`;
-- lembre que pesos por campo afetam o score do caso, mas não criam threshold separado
-  por chave no `config.yaml`.
+- check for assertions with partial score such as `field_by_field`;
+- compare `global_score` with `pass_rate`;
+- if a critical key dominates the decision, document it with `field_by_field.weights`;
+- remember that field weights affect the case score, but do not create key-separated threshold in
+  `config.yaml`.
 
 Overfitting:
 
-- habilite `use_gabarito_split`;
-- inspecione `validation_scores`;
-- adicione casos mais diversos;
-- não copie exemplos de teste para o prompt.
+- enable `use_benchmark_split`;
+- Inspect `validation_scores`;
+- add more diverse cases;
+- do not copy test examples for the prompt.
 
-Se `validation_scores.train` ficar muito acima de `validation_scores.val`, o prompt
-provavelmente está especializado nos casos usados para refino. Se `val` e `test`
-ficarem próximos, há sinal melhor de generalização.
+If `validation_scores.train` is far above `validation_scores.val`, the prompt is probably
+specialized in the cases used for refining. If `val` and `test` get close, there is a better sign of
+generalization.
 
-Como o split atual é determinístico por `case.id`, revise a distribuição dos casos.
-IDs agrupados por classe, data ou fonte podem gerar train/val/test enviesados.
+As the current split is deterministic by `case.id`, review the distribution of cases. IDs grouped by
+class, date or source can generate biased train/val/test.

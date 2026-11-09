@@ -1,29 +1,42 @@
 from __future__ import annotations
 
 from crucible.modules.optimizer.domain.models import (
+    Benchmark,
     CostEstimate,
-    Gabarito,
     ModelSpec,
     OptimizationConfig,
     Prompt,
 )
 
 
-def estimate_cost(prompt: Prompt, gabarito: Gabarito, config: OptimizationConfig) -> CostEstimate:
+def estimate_cost(
+    prompt: Prompt,
+    benchmark: Benchmark | None = None,
+    config: OptimizationConfig | None = None,
+    *,
+    gabarito: Benchmark | None = None,
+) -> CostEstimate:
+    if benchmark is not None and gabarito is not None and benchmark != gabarito:
+        raise ValueError("Conflicting benchmark arguments")
+    benchmark = benchmark if benchmark is not None else gabarito
+    if benchmark is None or config is None:
+        raise TypeError("benchmark and config are required")
     if config.target_model is None:
         raise ValueError("target_model is required for estimate-cost")
     if config.reasoning_model is None:
         raise ValueError("reasoning_model is required for estimate-cost")
-    rendered_prompts = [prompt.render(input_text=case.input) for case in gabarito.cases]
+    rendered_prompts = [prompt.render(input_text=case.input) for case in benchmark.cases]
     target_input_tokens_per_iteration = sum(_rough_tokens(item) for item in rendered_prompts)
-    target_output_tokens_per_iteration = len(gabarito.cases) * config.target_model.params.max_tokens
+    target_output_tokens_per_iteration = (
+        len(benchmark.cases) * config.target_model.params.max_tokens
+    )
     target_multiplier = config.max_iterations * config.n_runs_per_case
 
     reasoning_input_tokens = (
         _rough_tokens(prompt.template)
         + sum(
             _rough_tokens(case.input) + _rough_tokens(case.expected_output)
-            for case in gabarito.cases
+            for case in benchmark.cases
         )
     ) * max(0, config.max_iterations - 1)
     reasoning_output_tokens = (
@@ -38,7 +51,7 @@ def estimate_cost(prompt: Prompt, gabarito: Gabarito, config: OptimizationConfig
     )
 
     return CostEstimate(
-        cases_count=len(gabarito.cases),
+        cases_count=len(benchmark.cases),
         max_iterations=config.max_iterations,
         target_input_tokens=target_input,
         target_output_tokens=target_output,

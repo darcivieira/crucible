@@ -1,6 +1,6 @@
 # REST API
 
-Suba a API:
+Start the API:
 
 ```bash
 uv run crucible api --port 7788
@@ -12,23 +12,23 @@ Base URL:
 http://127.0.0.1:7788
 ```
 
-A API é intencionalmente fina. Ela usa o mesmo `Optimizer`, SQLite store e gerador
-de relatórios que a CLI.
+The API is intentionally thin. It uses the same `Optimizer`, SQLite store and reporting generator as
+CLI.
 
-Teste se a API está respondendo:
+Test whether the API is responding:
 
 ```bash
 curl -s http://127.0.0.1:7788/runs
 ```
 
-## Criar Run
+## Create Run
 
 ```http
 POST /runs
 Content-Type: application/json
 ```
 
-Exemplo com `curl` para uma validação simples:
+Example with `curl` for simple validation:
 
 ```bash
 curl -s -X POST http://127.0.0.1:7788/runs \
@@ -36,10 +36,10 @@ curl -s -X POST http://127.0.0.1:7788/runs \
   -d '{
     "mode": "validate",
     "prompt": {
-      "template": "Responda apenas: {input}",
+      "template": "Respond with only: {input}",
       "variables": ["input"]
     },
-    "gabarito": {
+    "benchmark": {
       "name": "sample",
       "version": "v1",
       "cases": [
@@ -64,17 +64,17 @@ Body:
 {
   "mode": "optimize",
   "prompt": {
-    "template": "Responda: {input}",
+    "template": "Respond: {input}",
     "variables": ["input"],
     "metadata": {}
   },
-  "gabarito": {
+  "benchmark": {
     "name": "sample",
     "version": "v1",
     "cases": [
       {
         "id": "case-001",
-        "input": "Diga apenas ok",
+        "input": "Say only ok",
         "expected_output": "ok",
         "assertion": {"type": "contains"},
         "weight": 1.0,
@@ -100,18 +100,18 @@ Body:
 }
 ```
 
-`mode` é opcional. Valores aceitos:
+`mode` is optional. Accepted values:
 
-- `optimize`: executa o loop de otimização e cria uma run normal.
-- `validate`: executa apenas a versão atual do prompt e persiste uma run com uma
-  iteração, `run_mode="validate"` e `stop_reason="validation_only"`.
-- `compare`: executa uma iteração por item de `comparison_models`.
+- `optimize`: Runs the optimization loop and creates a normal run.
+- `validate`: runs only the current version of the prompt and persists a run with one iteration,
+  `run_mode="validate"` and `stop_reason="validation_only"`.
+- `compare`: performs an iteration per item of `comparison_models`.
 
-Para `validate`, `optimize` e `estimate-cost`, `config.target_model` e
-`config.reasoning_model` são obrigatórios. Para `compare`, eles podem ficar ausentes;
-nesse caso, informe apenas `comparison_models`.
+For `validate`, `optimize` and `estimate-cost`, `config.target_model` and `config.reasoning_model`
+are required. For `compare`, they may be absent; in this case, provide only
+`comparison_models`.
 
-Resposta:
+Response:
 
 ```json
 {
@@ -120,19 +120,19 @@ Resposta:
 }
 ```
 
-## Consultar Status Da Task
+## Consult Task Status
 
 ```http
 GET /tasks/{task_id}
 ```
 
-Com `curl`:
+With `curl`:
 
 ```bash
 curl -s http://127.0.0.1:7788/tasks/<task-id>
 ```
 
-Respostas possíveis:
+Possible responses:
 
 ```json
 {"status": "queued"}
@@ -150,81 +150,80 @@ Respostas possíveis:
 {"status": "failed", "error": "..."}
 ```
 
-O estado de task é persistido no SQLite em `api_tasks`, então reiniciar a API não
-perde o histórico da task.
+The task status is persisted in SQLite in `api_tasks`, so restarting the API does not lose the task
+history.
 
-## Cancelar Task
+## Cancel Task
 
 ```http
 POST /tasks/{task_id}/cancel
 ```
 
-Com `curl`:
+With `curl`:
 
 ```bash
 curl -s -X POST http://127.0.0.1:7788/tasks/<task-id>/cancel
 ```
 
-Marca `cancel_requested=true`. O optimizer observa esse estado entre iterações e
-antes de executar novos casos. Chamadas de provider já em andamento não são
-interrompidas à força.
+Mark `cancel_requested=true`. The optimizer observes this state between iterations and before
+executing new cases. Provider calls already in progress are not interrupted by force.
 
-## Listar Runs
+## List Runs
 
 ```http
 GET /runs
 ```
 
-Retorna summaries das runs.
+Returns summaries from the runs.
 
-Com `curl`:
+With `curl`:
 
 ```bash
 curl -s http://127.0.0.1:7788/runs
 ```
 
-## Obter Run
+## Get Run
 
 ```http
 GET /runs/{run_id}
 ```
 
-Retorna o `OptimizationRun` serializado completo.
+Returns the full serialized `OptimizationRun`.
 
-Com `curl`:
+With `curl`:
 
 ```bash
 curl -s http://127.0.0.1:7788/runs/<run-id>
 ```
 
-## Criar Relatório
+## Create Report
 
 ```http
 POST /runs/{run_id}/reports/{format}
 ```
 
-Formatos:
+Formats:
 
 - `json`
 - `html`
 - `pdf`
 
-Resposta:
+Response:
 
 ```json
 {"path": ".crucible/reports/<run-id>.html"}
 ```
 
-Com `curl`:
+With `curl`:
 
 ```bash
 curl -s -X POST http://127.0.0.1:7788/runs/<run-id>/reports/html
 ```
 
-## Criar Comparação De Modelos
+## Create Model Comparison
 
-Em `mode: compare`, `target_model` e `reasoning_model` podem ficar ausentes. Informe
-os candidatos em `comparison_models`:
+In `mode: compare`, `target_model` and `reasoning_model` may be missing. Provide candidates in
+`comparison_models`:
 
 ```bash
 curl -s -X POST http://127.0.0.1:7788/runs \
@@ -232,10 +231,10 @@ curl -s -X POST http://127.0.0.1:7788/runs \
   -d '{
     "mode": "compare",
     "prompt": {
-      "template": "Responda apenas: {input}",
+      "template": "Respond with only: {input}",
       "variables": ["input"]
     },
-    "gabarito": {
+    "benchmark": {
       "name": "compare-sample",
       "version": "v1",
       "cases": [
@@ -262,8 +261,8 @@ curl -s -X POST http://127.0.0.1:7788/runs \
   }'
 ```
 
-## Notas Operacionais
+## Operational Notes
 
-- Não há autenticação ainda.
-- Execução em background usa `FastAPI BackgroundTasks`.
-- Para uso multiusuário ou produção, adicione autenticação antes de expor a API.
+- There's no authentication yet.
+- Background execution uses `FastAPI BackgroundTasks`.
+- For multiuser use or production, add authentication before exposing the API.

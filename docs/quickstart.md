@@ -1,62 +1,60 @@
 # Quickstart
 
-Este guia leva você de um diretório vazio até uma run otimizada e visível no
-dashboard local.
+This guide takes you from an empty directory to an optimized and visible run on the local dashboard.
 
-Se você está chegando agora e quer uma explicação mais guiada, leia também o
-[Guia do usuário](user-guide.md).
+If you are new and want a more guided explanation, also read the [User Guide](user-guide.md).
 
-## Pré-Requisitos
+## Prerequisites
 
 - Python 3.13.
 - `uv`.
-- Pelo menos um provider para o modelo alvo.
-- Um provider de raciocínio para `optimize`; `validate` precisa apenas do target.
+- At least one provider for the target model.
+- A reasoning provider for `optimize`; `validate` only needs the target.
 
-Para uma primeira execução local com Ollama:
+For a first local execution with Ollama:
 
 ```bash
 ollama pull gemma3:4b
 ```
 
-Para modelos cloud, exporte a chave correspondente:
+For cloud models, export the corresponding key:
 
 ```bash
 export CRUCIBLE_OPENAI_API_KEY=...
 ```
 
-## Instalar Dependências
+## Install Dependencies
 
-Na raiz do repositório:
+At the root of the repository:
 
 ```bash
 uv sync
 ```
 
-## Criar Um Projeto
+## Create Project
 
 ```bash
 uv run crucible init ./my-prompt
 ```
 
-Isso cria:
+That creates:
 
 ```text
 my-prompt/
   prompt.txt
-  gabarito.yaml
+  benchmark.yaml
   config.yaml
 ```
 
-Esses três arquivos são o núcleo do Crucible:
+These three files are the core of the Crucible:
 
-- `prompt.txt`: o prompt que será avaliado e depois otimizado.
-- `gabarito.yaml`: os casos de teste que dizem o que é uma resposta boa.
-- `config.yaml`: modelos, budget, paralelismo e critérios de parada.
+- `prompt.txt`: the prompt that will be evaluated and then optimized.
+- `benchmark.yaml`: test cases that say what is a good answer.
+- `config.yaml`: models, budget, parallelism and stopping criteria.
 
-## Configurar Modelos
+## Configure Models
 
-Edite `./my-prompt/config.yaml`:
+Edit `./my-prompt/config.yaml`:
 
 ```yaml
 target_model:
@@ -70,64 +68,64 @@ reasoning_model:
   role: reasoning
 ```
 
-Se ainda não quiser chamar um modelo de raciocínio cloud, comece validando:
+If you still don't want to call a cloud reasoning model, start validating:
 
 ```bash
 uv run crucible validate \
   --prompt ./my-prompt/prompt.txt \
-  --gabarito ./my-prompt/gabarito.yaml \
+  --benchmark ./my-prompt/benchmark.yaml \
   --config ./my-prompt/config.yaml
 ```
 
-`validate` é o check de sanidade do projeto. Ele executa o prompt atual contra o
-gabarito e mostra score, pass rate, custo e latência. Se esse comando falhar, corrija
-provider, prompt, gabarito ou assertion antes de rodar `optimize`.
+`validate` is the project's sanity check. It runs the current prompt against benchmark and shows
+score, pass rate, cost and latency. If this command fails, correct provider, prompt, benchmark or
+assertion before running `optimize`.
 
-## Estimar Custo
+## Estimate Cost
 
 ```bash
 uv run crucible estimate-cost --config ./my-prompt/config.yaml
 ```
 
-A estimativa é aproximada. Ela usa uma heurística simples de tokens e os preços
-declarados em cada `ModelSpec`.
+The estimate is approximate. It uses a simple heuristic of tokens and the prices declared in each
+`ModelSpec`.
 
-## Comparar Modelos
+## Compare Models
 
-Se você ainda está escolhendo o modelo alvo, configure `comparison_models` e rode:
+If you are still choosing the target model, configure `comparison_models` and run:
 
 ```bash
 uv run crucible compare-models --config ./my-prompt/config.yaml
 ```
 
-Esse comando executa o mesmo prompt contra o mesmo gabarito, uma vez por modelo
-candidato. Ele não otimiza prompt. O objetivo é decidir o melhor target por score,
-custo e custo-benefício antes de iniciar uma run mais cara de `optimize`.
+This command runs the same prompt against the same benchmark once per candidate model. It does not
+optimize prompt. The goal is to decide the best target by score, cost and value for money before
+starting a more expensive run of `optimize`.
 
-## Otimizar
+## Optimize
 
 ```bash
 uv run crucible optimize --config ./my-prompt/config.yaml
 ```
 
-`optimize` é a etapa em que o Crucible passa de avaliação para melhoria automática.
-Ele usa o `reasoning_model` para olhar os casos que falharam, identificar padrões de
-erro e propor uma nova versão do prompt.
+`optimize` is the step in which Crucible goes from evaluation to automatic improvement. It uses
+`reasoning_model` to look at failed cases, identify error patterns, and propose a new version of the
+prompt.
 
-O Crucible irá:
+The Crucible will:
 
-1. Executar o prompt inicial.
-2. Avaliar todos os casos do gabarito.
-3. Diagnosticar falhas com o modelo de raciocínio.
-4. Gerar um prompt refinado.
-5. Repetir até atingir threshold, budget, tempo, plateau ou máximo de iterações.
+1. Run initial prompt.
+2. Evaluate all benchmark cases.
+3. Diagnose faults with the reasoning model.
+4. Generate a refined prompt.
+5. Repeat until you reach threshold, budget, time, plateau or maximum iterations.
 
-O resultado final aponta sempre para o melhor prompt visto durante a run.
+The final result always points to the best prompt seen during the run.
 
-Isso importa porque uma iteração posterior pode piorar. O histórico fica guardado,
-mas o "best prompt" continua sendo a melhor versão encontrada.
+This matters because a later iteration may get worse. History is saved, but the best prompt remains
+the best version found.
 
-## Inspecionar Resultados
+## Inspect Results
 
 ```bash
 uv run crucible list-runs
@@ -136,56 +134,56 @@ uv run crucible report --run latest --format html
 uv run crucible diff --run latest --from 0 --to best
 ```
 
-Relatórios são escritos em `.crucible/reports/`.
+Reports are written in `.crucible/reports/`.
 
-Use `diff` para entender o que mudou entre o prompt inicial e o melhor prompt. Use
-`report` ou o dashboard para ver quais casos continuaram falhando e quais viraram
-regressão.
+Use `diff` to understand what has changed between the initial prompt and the best prompt. Use
+`report` or the dashboard to see which cases have continued to fail and which have become
+regression.
 
-## Abrir Dashboard
+## Open Dashboard
 
 ```bash
 uv run crucible serve
 ```
 
-Abra:
+Open:
 
 ```text
 http://127.0.0.1:7777
 ```
 
-Na tela inicial você pode abrir `Nova run` para executar pelo navegador.
+On the home screen you can open `New run` to run by the browser.
 
-Use `Validate` quando quiser medir rapidamente o prompt atual. Use `Optimize` quando
-quiser que o Crucible proponha versões melhores. Use `Compare` quando quiser avaliar
-os modelos de `comparison_models`. A tela aceita caminhos locais para `prompt.txt`,
-`gabarito.yaml` e `config.yaml`, ou conteúdo colado nos editores.
+Use `Validate` when you want to quickly measure the current prompt. Use `Optimize` when you want
+Crucible to propose better versions. Use `Compare` when you want to evaluate the `comparison_models`
+models. The screen accepts local paths for `prompt.txt`, `benchmark.yaml` and `config.yaml`, or
+content pasted in editors.
 
-Também é possível escolher host e porta:
+You can also choose host and port:
 
 ```bash
 uv run crucible serve --host 0.0.0.0 --port 7777
 ```
 
-Use `0.0.0.0` apenas em rede confiável. O dashboard não tem autenticação.
+Use `0.0.0.0` only on trusted network. Dashboard has no authentication.
 
-## Usar API Local
+## Use Local API
 
-Se você quer integrar o Crucible com outro sistema, suba a API:
+If you want to integrate Crucible with another system, start the API:
 
 ```bash
 uv run crucible api --port 7788
 ```
 
-Teste com `curl`:
+Test with `curl`:
 
 ```bash
 curl -s http://127.0.0.1:7788/runs
 ```
 
-Veja exemplos completos em [REST API](api.md).
+See full examples in [REST API](api.md).
 
-## Exportar Artefatos
+## Export Artefacts
 
 ```bash
 uv run crucible export --run latest --format prompt --output ./best_prompt.txt
@@ -194,18 +192,18 @@ uv run crucible export --run latest --format parquet --output ./verdicts.parquet
 uv run crucible report --run latest --format pdf
 ```
 
-## Saída Estruturada
+## Structured Output
 
-Quando o modelo deve responder em JSON seguindo um schema, use o exemplo em
-`examples/structured-output/`. O exemplo padrão cobre o caso em que o gabarito traz
-o payload esperado em `expected_output`, enquanto o schema fica no `config.yaml`.
+When the model should respond in JSON following a schema, use the example in
+`examples/structured-output/`. The default example covers the case where the benchmark brings the
+expected payload in `expected_output`, while the schema stays in `config.yaml`.
 
 OpenAI Responses API:
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.yaml \
+  --benchmark ./examples/structured-output/benchmark.yaml \
   --config ./examples/structured-output/config.openai-responses.yaml
 ```
 
@@ -214,44 +212,43 @@ Ollama:
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.yaml \
+  --benchmark ./examples/structured-output/benchmark.yaml \
   --config ./examples/structured-output/config.ollama.yaml
 ```
 
-Esse exemplo usa três camadas:
+This example uses three layers:
 
-- `target_model.output_format`: solicita o JSON Schema ao provider.
-- `expected_output`: guarda o payload esperado para aquele caso.
-- `assertion.type: json_schema`: valida expected/actual contra o schema do config e
-  compara os campos parseados.
+- `target_model.output_format`: requests JSON Schema from the provider.
+- `expected_output`: saves the payload expected for that case.
+- `assertion.type: json_schema`: validates expected/actual outputs against the configuration schema
+  and compares parsed
+  fields.
 
-Quando você quer validar apenas o contrato estrutural, sem comparar valores
-esperados, use:
-
-```bash
-uv run crucible validate \
-  --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.schema.yaml \
-  --config ./examples/structured-output/config.openai-responses.yaml
-```
-
-Quando você está escrevendo o gabarito manualmente e quer deixar a intenção explícita,
-use `field_by_field`:
+When you want to validate only the structural contract, without comparing expected values, use:
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.field-by-field.yaml \
+  --benchmark ./examples/structured-output/benchmark.schema.yaml \
   --config ./examples/structured-output/config.openai-responses.yaml
 ```
 
-## Workflow Recomendado
+When you are writing the benchmark manually and want to leave explicit intent, use `field_by_field`:
 
-1. Escreva ou importe um gabarito.
-2. Rode `validate` até setup, providers e assertions estarem corretos.
-3. Rode `estimate-cost`.
-4. Se houver dúvida sobre o target, rode `compare-models`.
-5. Rode `optimize`.
-6. Inspecione falhas e regressões no dashboard.
-7. Exporte o melhor prompt e os verdicts.
-8. Versione prompt/gabarito/config, mas não versiona `.crucible/`.
+```bash
+uv run crucible validate \
+  --prompt ./examples/structured-output/prompt.txt \
+  --benchmark ./examples/structured-output/benchmark.field-by-field.yaml \
+  --config ./examples/structured-output/config.openai-responses.yaml
+```
+
+## Recommended Workflow
+
+1. Write or import a benchmark.
+2. Run `validate` until setup, providers and assertions are correct.
+3. Run `estimate-cost`.
+4. If there is doubt about the target, run `compare-models`.
+5. Run `optimize`.
+6. Inspect failures and regressions on the dashboard.
+7. Export the best prompt and verdicts.
+8. Version the prompt/benchmark/config files, and keep `.crucible/` out of version control.

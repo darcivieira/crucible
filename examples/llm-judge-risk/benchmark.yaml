@@ -1,0 +1,24 @@
+name: llm-judge-risk
+version: v1
+description: Example of subjective evaluation using LLM-as-judge.
+cases:
+  - id: risk-001
+    input: "A critical supplier delayed three consecutive deliveries and did not provide a recovery plan."
+    expected_output: "High risk due to recurring delays and the absence of a mitigation plan."
+    assertion:
+      type: llm_judge
+      rubric: >
+        The response must identify high risk, cite recurring delays, and mention the
+        absence of a mitigation plan. It must not invent information.
+      pass_threshold: 0.75
+    tags: [risk, supplier]
+  - id: risk-002
+    input: "The customer requested a copy of the payment slip before the due date."
+    expected_output: "Low risk; this is a routine operational request."
+    assertion:
+      type: llm_judge
+      rubric: >
+        The response must classify the risk as low and explain that the request is
+        a routine operational request.
+      pass_threshold: 0.75
+    tags: [risk, billing]

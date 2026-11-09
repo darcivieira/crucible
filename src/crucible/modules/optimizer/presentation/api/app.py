@@ -3,18 +3,18 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from crucible.core.settings import get_settings
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.application.reports import write_report
 from crucible.modules.optimizer.application.tasks import RunTaskRequest, run_task
-from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt, RunMode
+from crucible.modules.optimizer.domain.models import Benchmark, OptimizationConfig, Prompt, RunMode
 
 
 class CreateRunRequest(BaseModel):
     prompt: Prompt
-    gabarito: Gabarito
+    benchmark: Benchmark = Field(validation_alias=AliasChoices("benchmark", "gabarito"))
     config: OptimizationConfig
     mode: RunMode = Field(default="optimize")
 
@@ -40,7 +40,7 @@ def create_api_app(store: SQLiteRunStore | None = None) -> FastAPI:
             task_id,
             RunTaskRequest(
                 prompt=request.prompt,
-                gabarito=request.gabarito,
+                benchmark=request.benchmark,
                 config=request.config,
                 mode=request.mode,
             ),

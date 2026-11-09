@@ -6,9 +6,14 @@ import re
 import unicodedata
 from typing import Any
 
+from crucible.modules.optimizer.application.language_support import (
+    EXTRACTION_TERMS,
+    INFERENCE_DRIFT_PATTERNS,
+    NO_INVENTION_TERMS,
+)
 from crucible.modules.optimizer.domain.models import (
+    Benchmark,
     ContractRule,
-    Gabarito,
     ModelSpec,
     OptimizationConfig,
     Prompt,
@@ -16,64 +21,24 @@ from crucible.modules.optimizer.domain.models import (
     TaskContract,
 )
 
-_EXTRACTION_TERMS = (
-    "exato",
-    "exata",
-    "literal",
-    "trecho",
-    "extraia",
-    "extrair",
-    "copie",
-    "transcreva",
-    "fiel",
+_EXTRACTION_TERMS = tuple(term for terms in EXTRACTION_TERMS.values() for term in terms)
+_INFERENCE_DRIFT_PATTERNS = tuple(
+    term for terms in INFERENCE_DRIFT_PATTERNS.values() for term in terms
 )
-_INFERENCE_DRIFT_PATTERNS = (
-    "explique por que",
-    "explique porque",
-    "justifique por que",
-    "justifique porque",
-    "resuma por que",
-    "inferir o motivo",
-    "inferir a razão",
-)
-_NO_INVENTION_TERMS = (
-    "não invente",
-    "nao invente",
-    "não criar",
-    "nao criar",
-    "não crie informações",
-    "nao crie informacoes",
-    "não inclua informação que não existe",
-    "nao inclua informacao que nao existe",
-    "não responda uma informação que não existe",
-    "nao responda uma informacao que nao existe",
-    "use apenas informações presentes",
-    "use apenas informacoes presentes",
-    "apenas informações presentes",
-    "apenas informacoes presentes",
-    "apenas nas informações presentes",
-    "apenas nas informacoes presentes",
-    "com base apenas nas informações presentes",
-    "com base apenas nas informacoes presentes",
-    "não deduza dados ausentes",
-    "nao deduza dados ausentes",
-    "não assuma conteúdo não mencionado",
-    "nao assuma conteudo nao mencionado",
-    "baseie-se apenas no texto",
-    "baseie se apenas no texto",
-)
+_NO_INVENTION_TERMS = tuple(term for terms in NO_INVENTION_TERMS.values() for term in terms)
+_FUTURE_PATTERN = r"\b(?:future|futuros?)\b"
 
 
 def build_task_contract(
     prompt: Prompt,
-    gabarito: Gabarito,
+    benchmark: Benchmark,
     config: OptimizationConfig,
 ) -> TaskContract:
     prompt_text = prompt.template.strip()
     target_model = _contract_target_model(config)
     output_schema = target_model.output_format.schema_ if target_model else {}
     output_contract = _output_contract(config)
-    parsed_expected = [_parse_expected(case.expected_output) for case in gabarito.cases[:50]]
+    parsed_expected = [_parse_expected(case.expected_output) for case in benchmark.cases[:50]]
     expected_objects = [value for value in parsed_expected if isinstance(value, dict)]
     fields = _fields_from_schema(output_schema) or _fields_from_expected(expected_objects)
 
@@ -84,15 +49,15 @@ def build_task_contract(
     if fields:
         invariants.append(
             ContractRule(
-                text=f"Preservar o contrato de saída com os campos: {', '.join(fields)}.",
-                source="config" if output_schema else "gabarito",
+                text=f"Preserve the output contract with the fields: {', '.join(fields)}.",
+                source="config" if output_schema else "benchmark",
             )
         )
     if "classification" in fields:
         invariants.append(
             ContractRule(
-                text="classification deve representar a classe esperada pelo gabarito/schema.",
-                source="gabarito",
+                text="classification must represent the class expected by the benchmark/schema.",
+                source="benchmark",
             )
         )
     if _contains_any(prompt_text, _EXTRACTION_TERMS):
@@ -100,8 +65,8 @@ def build_task_contract(
         invariants.append(
             ContractRule(
                 text=(
-                    "Preservar instruções de extração literal/fiel; não trocar por "
-                    "explicação, resumo ou inferência."
+                    "Preserve literal extraction instructions; do not replace them with "
+                    "explanation, summary, or inference."
                 ),
                 source="prompt",
             )
@@ -112,25 +77,25 @@ def build_task_contract(
             invariants.append(
                 ContractRule(
                     text=(
-                        "O gabarito indica que campos de evidência devem conter trecho textual "
-                        "extraído/fiel, não uma justificativa inferida."
+                        "Evidence fields in the benchmark must contain a verbatim passage "
+                        "extracted from the source, rather than an inferred rationale."
                     ),
-                    source="gabarito",
+                    source="benchmark",
                 )
             )
-    if _contains_any(prompt_text, ("não invente", "nao invente", "não responda uma informação")):
+    if _contains_any(prompt_text, _NO_INVENTION_TERMS):
         negative_rules.append(
             ContractRule(
-                text="Não inventar informação inexistente no input.",
+                text="Do not invent information absent from the input.",
                 source="prompt",
             )
         )
-    if re.search(r"\bfuturo", prompt_text, flags=re.IGNORECASE):
+    if re.search(_FUTURE_PATTERN, prompt_text, flags=re.IGNORECASE):
         invariants.append(
             ContractRule(
                 text=(
-                    "Classificar apenas eventos futuros quando essa restrição existir "
-                    "no prompt inicial."
+                    "Classify only future events when this restriction exists "
+                    "in the initial prompt."
                 ),
                 source="prompt",
             )
@@ -138,8 +103,8 @@ def build_task_contract(
     if _has_empty_evidence_for_none(expected_objects):
         invariants.append(
             ContractRule(
-                text="Quando classification for Nenhum, manter o campo de evidência textual vazio.",
-                source="gabarito",
+                text="Keep textual evidence empty for no-match classes shown in the benchmark.",
+                source="benchmark",
             )
         )
 
@@ -166,21 +131,27 @@ def validate_refinement_against_contract(
     if contract.output_contract.get("type") != "json_schema":
         for field in fields:
             if str(field) not in new_prompt and contract.literal_extraction_fields:
-                violations.append(f"campo de saída ausente no prompt: {field}")
+                violations.append(f"output field missing from the prompt: {field}")
 
     if contract.literal_extraction_fields:
         if not _contains_any(normalized, _EXTRACTION_TERMS):
-            violations.append("instrução de extração literal/fiel ausente")
+            violations.append("literal/verbatim extraction instruction missing")
         if _contains_any(normalized, _INFERENCE_DRIFT_PATTERNS):
-            violations.append("proposta troca extração literal por explicação/inferência")
+            violations.append("proposal replaces literal extraction with explanation/inference")
 
-    if any("Não inventar" in rule.text for rule in contract.negative_rules):
+    if any(
+        _contains_any(rule.text, ("do not invent", "nao inventar"))
+        for rule in contract.negative_rules
+    ):
         if not _contains_any(normalized, _NO_INVENTION_TERMS):
-            violations.append("regra de não inventar informação foi removida")
+            violations.append("rule against inventing information was removed")
 
-    if any("eventos futuros" in rule.text for rule in contract.invariants):
-        if "futuro" not in normalized:
-            violations.append("restrição de eventos futuros foi removida")
+    if any(
+        _contains_any(rule.text, ("future events", "eventos futuros"))
+        for rule in contract.invariants
+    ):
+        if not re.search(_FUTURE_PATTERN, normalized):
+            violations.append("future-events restriction was removed")
 
     return violations
 
@@ -263,7 +234,7 @@ def _has_empty_evidence_for_none(values: list[dict[str, Any]]) -> bool:
     for value in values:
         classification = value.get("classification")
         evidence = value.get("text_validation")
-        if classification == "Nenhum" and evidence == "":
+        if classification in ("None", "Nenhum") and evidence == "":
             return True
     return False
 

@@ -1,9 +1,9 @@
 name: structured-output-schema
 version: v1
-description: Example gabarito for validating only the returned JSON Schema contract.
+description: Example benchmark for validating only the returned JSON Schema contract.
 cases:
   - id: summary-schema-001
-    input: "Cliente relatou atraso no pagamento, mas prometeu quitar em 7 dias."
+    input: "The customer reported a late payment but promised to settle within 7 days."
     expected_output: |
       {
         "type": "object",

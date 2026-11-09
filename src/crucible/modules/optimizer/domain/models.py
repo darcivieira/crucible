@@ -10,7 +10,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from crucible.modules.optimizer.domain.assertions import Assertion
 
@@ -33,7 +33,7 @@ RunStatus = Literal["running", "completed", "failed", "aborted"]
 RunMode = Literal["validate", "optimize", "compare"]
 ProviderCacheOnError = Literal["fail", "fallback"]
 OpenAIPromptCacheRetention = Literal["in_memory", "24h"]
-TaskContractSource = Literal["prompt", "config", "gabarito", "heuristic"]
+TaskContractSource = Literal["prompt", "config", "benchmark", "heuristic"]
 StopReason = Literal[
     "threshold_reached",
     "max_iterations",
@@ -97,7 +97,7 @@ class TestCase(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-class Gabarito(BaseModel):
+class Benchmark(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
@@ -109,7 +109,7 @@ class Gabarito(BaseModel):
     @classmethod
     def require_cases(cls, value: list[TestCase]) -> list[TestCase]:
         if not value:
-            raise ValueError("gabarito must contain at least one case")
+            raise ValueError("benchmark must contain at least one case")
         return value
 
     @property
@@ -118,19 +118,21 @@ class Gabarito(BaseModel):
         return sha256(payload.encode()).hexdigest()[:12]
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> Gabarito:
+    def from_yaml(cls, path: str | Path) -> Benchmark:
         with Path(path).open(encoding="utf-8") as file:
             return cls.model_validate(yaml.safe_load(file))
 
     @classmethod
-    def from_json(cls, path: str | Path) -> Gabarito:
+    def from_json(cls, path: str | Path) -> Benchmark:
         return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
-    def split(self, train: float = 0.7, val: float = 0.15) -> tuple[Gabarito, Gabarito, Gabarito]:
+    def split(
+        self, train: float = 0.7, val: float = 0.15
+    ) -> tuple[Benchmark, Benchmark, Benchmark]:
         if train <= 0 or val < 0 or train + val >= 1:
             raise ValueError("split ratios must satisfy train > 0, val >= 0 and train + val < 1")
         if len(self.cases) < 3:
-            raise ValueError("gabarito split requires at least 3 cases")
+            raise ValueError("benchmark split requires at least 3 cases")
         cases = sorted(self.cases, key=lambda case: case.id)
         train_end = min(len(cases) - 2, max(1, int(len(cases) * train)))
         val_end = min(len(cases) - 1, max(train_end + 1, train_end + int(len(cases) * val)))
@@ -143,6 +145,10 @@ class Gabarito(BaseModel):
             ),
             self.model_copy(update={"cases": cases[val_end:], "version": f"{self.version}-test"}),
         )
+
+
+# Legacy SDK import retained while Benchmark is the canonical public name.
+Gabarito = Benchmark
 
 
 class ModelParams(BaseModel):
@@ -258,6 +264,11 @@ class ContractRule(BaseModel):
     source: TaskContractSource
     critical: bool = True
 
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_legacy_source(cls, value: Any) -> Any:
+        return "benchmark" if value == "gabarito" else value
+
 
 class TaskContract(BaseModel):
     objective: str = ""
@@ -290,10 +301,10 @@ class RefinementProposal(BaseModel):
         new = Prompt(template=self.new_prompt, variables=current.variables)
         violations: list[str] = []
         if new.content_hash == current.content_hash:
-            violations.append("prompt idêntico ao atual")
+            violations.append("prompt is identical to the current one")
         for variable in current.variables:
             if "{" + variable + "}" not in self.new_prompt:
-                violations.append(f"variável ausente: {variable}")
+                violations.append(f"missing variable: {variable}")
         return violations
 
 
@@ -401,7 +412,10 @@ class OptimizationConfig(BaseModel):
     max_failures_for_refinement: int = 10
     max_refinement_repair_attempts: int = Field(default=5, ge=1)
     instability_std_threshold_ms: float = 250.0
-    use_gabarito_split: bool = False
+    use_benchmark_split: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("use_benchmark_split", "use_gabarito_split"),
+    )
     train_ratio: float = 0.7
     val_ratio: float = 0.15
     execution_backend: ExecutionBackendName = "local"
@@ -423,13 +437,23 @@ class OptimizationConfig(BaseModel):
     judge_models: list[ModelSpec] = Field(default_factory=list)
     embedding_model: ModelSpec | None = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def use_gabarito_split(self) -> bool:
+        """Deprecated SDK alias for the benchmark split setting."""
+        return self.use_benchmark_split
+
+    @use_gabarito_split.setter
+    def use_gabarito_split(self, value: bool) -> None:
+        self.use_benchmark_split = value
+
 
 class OptimizationRun(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
     run_mode: RunMode = "optimize"
     config: OptimizationConfig
     task_contract: TaskContract | None = None
-    gabarito_hash: str
+    benchmark_hash: str = Field(validation_alias=AliasChoices("benchmark_hash", "gabarito_hash"))
     initial_prompt_hash: str
     iterations: list[Iteration] = Field(default_factory=list)
     status: RunStatus = "running"
@@ -442,6 +466,16 @@ class OptimizationRun(BaseModel):
     active_learning_suggestions: list[ActiveLearningSuggestion] = Field(default_factory=list)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     ended_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def gabarito_hash(self) -> str:
+        """Deprecated SDK alias for the benchmark hash."""
+        return self.benchmark_hash
+
+    @gabarito_hash.setter
+    def gabarito_hash(self, value: str) -> None:
+        self.benchmark_hash = value
 
     @property
     def best_iteration(self) -> Iteration | None:

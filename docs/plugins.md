@@ -1,34 +1,34 @@
 # Plugins
 
-Plugins estendem o Crucible sem alterar o pacote core.
+Plugins extend the Crucible without changing the core package.
 
-Pontos de extensão atuais:
+Current extension points:
 
-- assertions customizadas;
-- importadores customizados.
+- custom assertions;
+- custom importers.
 
-Plugins são módulos Python carregados por `CRUCIBLE_PLUGIN_MODULES`.
+Plugins are Python modules loaded by `CRUCIBLE_PLUGIN_MODULES`.
 
 ```bash
 CRUCIBLE_PLUGIN_MODULES=my_project.crucible_plugin uv run crucible validate ...
 ```
 
-Múltiplos módulos:
+Multiple modules:
 
 ```bash
 CRUCIBLE_PLUGIN_MODULES=plugin_a,plugin_b uv run crucible optimize --config config.yaml
 ```
 
-## Formato Do Plugin
+## Plugin Format
 
-Um módulo de plugin expõe:
+A plugin module exposes:
 
 ```python
 def register(registry):
     ...
 ```
 
-## Assertion Customizada
+## Custom assertion
 
 Plugin:
 
@@ -48,7 +48,7 @@ def register(registry):
     registry.register_assertion("min_length", min_length)
 ```
 
-Gabarito:
+Benchmark:
 
 ```yaml
 assertion:
@@ -58,19 +58,19 @@ assertion:
     minimum: 50
 ```
 
-## Importador Customizado
+## Custom Importer
 
 Plugin:
 
 ```python
 import json
 
-from crucible import Contains, Gabarito, TestCase
+from crucible import Contains, Benchmark, TestCase
 
 def register(registry):
     def my_importer(text):
         payload = json.loads(text)
-        return Gabarito(
+        return Benchmark(
             name="custom",
             version="imported",
             cases=[
@@ -91,14 +91,14 @@ CLI:
 
 ```bash
 CRUCIBLE_PLUGIN_MODULES=my_plugin \
-  uv run crucible import-gabarito --source my_format --input data.json --output gabarito.yaml
+  uv run crucible import-benchmark --source my_format --input data.json --output benchmark.yaml
 ```
 
-## Tratamento De Erros
+## Error Handling
 
-Erros de plugin sobem para o chamador. Em plugins usados em produção, envolva os
-handlers com mensagens claras e testes de fixture.
+Plugin errors propagate to the caller. In plugins used in production, wrap the handlers with clear
+messages and fixture tests.
 
-## Testando Plugins
+## Testing Plugins
 
-Use `FakeProvider` e gabaritos pequenos. Evite chamadas externas em testes de plugin.
+Use `FakeProvider` and small benchmarks. Avoid external calls in plugin tests.

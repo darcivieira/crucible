@@ -17,6 +17,7 @@ from jinja2 import DictLoader, Environment, select_autoescape
 from pydantic import ValidationError
 
 from crucible.core.settings import get_settings
+from crucible.modules.optimizer.adapters.compatibility import resolve_benchmark_path
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore, TaskRecord
 from crucible.modules.optimizer.application.reports import write_report
 from crucible.modules.optimizer.application.tasks import (
@@ -27,7 +28,7 @@ from crucible.modules.optimizer.application.tasks import (
     stop_reason_label,
 )
 from crucible.modules.optimizer.domain.models import (
-    Gabarito,
+    Benchmark,
     Iteration,
     OptimizationConfig,
     OptimizationRun,
@@ -240,7 +241,7 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
     async def download_pdf_report(run_id: str) -> FileResponse:
         run = await _load_run_or_404(run_store, run_id)
         if run.status not in {"completed", "failed", "aborted"}:
-            raise HTTPException(status_code=409, detail="Run ainda não finalizada")
+            raise HTTPException(status_code=409, detail="Run has not finished yet")
         path = write_report(run, settings.reports_dir, "pdf")
         return FileResponse(
             path,
@@ -307,16 +308,23 @@ async def _form_values(request: Request) -> dict[str, str]:
 
 
 def _run_request_from_form(values: Mapping[str, str]) -> RunTaskRequest:
+    values = dict(values)
+    for suffix in ("content", "path"):
+        key = f"benchmark_{suffix}"
+        if not values.get(key):
+            values[key] = values.get(f"gabarito_{suffix}", "")
     mode = values.get("mode", "optimize")
     if mode not in {"validate", "optimize", "compare"}:
-        raise ValueError("Modo deve ser validate, optimize ou compare.")
+        raise ValueError("Mode must be validate, optimize, or compare.")
     try:
         prompt = Prompt(template=_read_value(values, "prompt"), variables=["input"])
-        gabarito = Gabarito.model_validate(yaml.safe_load(_read_value(values, "gabarito")))
+        benchmark = Benchmark.model_validate(yaml.safe_load(_read_value(values, "benchmark")))
         config = OptimizationConfig.model_validate(yaml.safe_load(_read_value(values, "config")))
     except (OSError, ValidationError, yaml.YAMLError, ValueError) as exc:
-        raise ValueError(f"Não foi possível montar a run: {exc}") from exc
-    return RunTaskRequest(prompt=prompt, gabarito=gabarito, config=config, mode=cast(RunMode, mode))
+        raise ValueError(f"Could not create the run: {exc}") from exc
+    return RunTaskRequest(
+        prompt=prompt, benchmark=benchmark, config=config, mode=cast(RunMode, mode)
+    )
 
 
 def _read_value(values: Mapping[str, str], name: str) -> str:
@@ -325,23 +333,26 @@ def _read_value(values: Mapping[str, str], name: str) -> str:
         return content
     path_value = values.get(f"{name}_path", "").strip()
     if path_value:
-        return Path(path_value).read_text(encoding="utf-8")
-    raise ValueError(f"Informe o conteúdo ou caminho de {name}.")
+        path = Path(path_value)
+        if name == "benchmark":
+            path = resolve_benchmark_path(path)
+        return path.read_text(encoding="utf-8")
+    raise ValueError(f"Provide the content or path for {name}.")
 
 
 def _default_form_values() -> dict[str, str]:
     return {
         "mode": "optimize",
         "prompt_path": "prompt.txt",
-        "gabarito_path": "gabarito.yaml",
+        "benchmark_path": "benchmark.yaml",
         "config_path": "config.yaml",
-        "prompt_content": "Classifique o texto abaixo.\n\nEntrada:\n{input}",
-        "gabarito_content": """name: dashboard-sample
+        "prompt_content": "Classify the text below.\n\nInput:\n{input}",
+        "benchmark_content": """name: dashboard-sample
 version: v1
 cases:
   - id: sample-001
-    input: "cliente prometeu pagar em 7 dias"
-    expected_output: "pagamento"
+    input: "customer promised to pay within 7 days"
+    expected_output: "payment"
     assertion:
       type: contains
     tags: [sample]
@@ -393,9 +404,7 @@ def _filter_verdicts(
     filtered = verdicts
     if case_id:
         filtered = [
-            verdict
-            for verdict in filtered
-            if case_id.lower() in verdict["test_case"]["id"].lower()
+            verdict for verdict in filtered if case_id.lower() in verdict["test_case"]["id"].lower()
         ]
     if passed in {"true", "false"}:
         wanted = passed == "true"
@@ -405,9 +414,7 @@ def _filter_verdicts(
         filtered = [verdict for verdict in filtered if bool(verdict.get("is_regression")) is wanted]
     if tag:
         filtered = [
-            verdict
-            for verdict in filtered
-            if tag in verdict.get("test_case", {}).get("tags", [])
+            verdict for verdict in filtered if tag in verdict.get("test_case", {}).get("tags", [])
         ]
     if assertion_type:
         filtered = [
@@ -416,9 +423,13 @@ def _filter_verdicts(
             if verdict.get("test_case", {}).get("assertion", {}).get("type") == assertion_type
         ]
     if min_score is not None:
-        filtered = [verdict for verdict in filtered if float(verdict.get("score", 0.0)) >= min_score]
+        filtered = [
+            verdict for verdict in filtered if float(verdict.get("score", 0.0)) >= min_score
+        ]
     if max_score is not None:
-        filtered = [verdict for verdict in filtered if float(verdict.get("score", 0.0)) <= max_score]
+        filtered = [
+            verdict for verdict in filtered if float(verdict.get("score", 0.0)) <= max_score
+        ]
     return filtered
 
 
@@ -633,7 +644,7 @@ summary { cursor: pointer; font-weight: 650; }
 _TEMPLATES: Mapping[str, str] = {
     "base.html": """
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -645,10 +656,10 @@ _TEMPLATES: Mapping[str, str] = {
 <body>
   <header>
     <nav>
-      <div><strong>Crucible</strong> <span class="muted">dashboard local</span></div>
+      <div><strong>Crucible</strong> <span class="muted">local dashboard</span></div>
       <div>
         <a href="/">Runs</a>
-        <a href="/runs/new">Nova run</a>
+        <a href="/runs/new">New run</a>
         <a href="/docs" target="_blank">API docs</a>
       </div>
     </nav>
@@ -663,26 +674,26 @@ _TEMPLATES: Mapping[str, str] = {
 <div class="page-head">
   <div>
     <h1>Runs</h1>
-    <p class="muted">Histórico local para investigar qualidade, custo e regressões.</p>
+    <p class="muted">Local history to investigate quality, cost, and regressions.</p>
   </div>
-  <div class="actions"><a class="button" href="/runs/new">Nova run</a></div>
+  <div class="actions"><a class="button" href="/runs/new">New run</a></div>
 </div>
 <div class="metrics">
   <div class="metric"><span>Total</span><strong>{{ summary.total }}</strong></div>
-  <div class="metric"><span>Em andamento</span><strong>{{ summary.running }}</strong></div>
-  <div class="metric"><span>Concluídas</span><strong>{{ summary.completed }}</strong></div>
-  <div class="metric"><span>Melhor score</span><strong>{{ summary.best_score|score }}</strong></div>
-  <div class="metric"><span>Custo total</span><strong>{{ summary.total_cost|money }}</strong></div>
+  <div class="metric"><span>In progress</span><strong>{{ summary.running }}</strong></div>
+  <div class="metric"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
+  <div class="metric"><span>Best score</span><strong>{{ summary.best_score|score }}</strong></div>
+  <div class="metric"><span>Total cost</span><strong>{{ summary.total_cost|money }}</strong></div>
 </div>
 <form method="get" class="panel filters">
   <div><label>Status</label><input name="status" value="{{ filters.status }}"></div>
-  <div><label>Modelo</label><input name="target" value="{{ filters.target }}"></div>
-  <div><label>Score mínimo</label><input name="min_score" type="number" step="0.1" value="{{ filters.min_score or '' }}"></div>
-  <div><button type="submit">Filtrar</button></div>
+  <div><label>Model</label><input name="target" value="{{ filters.target }}"></div>
+  <div><label>Minimum score</label><input name="min_score" type="number" step="0.1" value="{{ filters.min_score or '' }}"></div>
+  <div><button type="submit">Filter</button></div>
 </form>
 <table>
   <thead>
-    <tr><th>Run</th><th>Modo</th><th>Status</th><th>Melhor</th><th>Custo</th><th>Target</th><th>Parada</th><th>Início</th></tr>
+    <tr><th>Run</th><th>Mode</th><th>Status</th><th>Best</th><th>Cost</th><th>Target</th><th>Stop reason</th><th>Started</th></tr>
   </thead>
   <tbody>
   {% for run in runs %}
@@ -697,7 +708,7 @@ _TEMPLATES: Mapping[str, str] = {
       <td>{{ run.started_at }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="8">Nenhuma run encontrada.</td></tr>
+    <tr><td colspan="8">No runs found.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -708,31 +719,31 @@ _TEMPLATES: Mapping[str, str] = {
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Nova run</h1>
-    <p class="muted">Crie validações rápidas ou otimizações completas a partir de arquivos locais ou conteúdo editado.</p>
+    <h1>New run</h1>
+    <p class="muted">Create quick validations or full optimizations from local files or edited content.</p>
   </div>
-  <div class="actions"><a class="button secondary" href="/">Voltar</a></div>
+  <div class="actions"><a class="button secondary" href="/">Back</a></div>
 </div>
 {% for error in errors %}<div class="error">{{ error }}</div>{% endfor %}
 <form method="post">
   <section class="panel">
     <div class="grid-3">
       <div>
-        <label>Modo</label>
+        <label>Mode</label>
         <select name="mode">
           <option value="optimize" {% if values.mode == 'optimize' %}selected{% endif %}>Optimize</option>
           <option value="validate" {% if values.mode == 'validate' %}selected{% endif %}>Validate</option>
           <option value="compare" {% if values.mode == 'compare' %}selected{% endif %}>Compare models</option>
         </select>
-        <div class="help">Validate mede o prompt atual. Optimize tenta gerar versões melhores. Compare executa uma versão por modelo em comparison_models.</div>
+        <div class="help">Validate measures the current prompt. Optimize tries to generate better versions. Compare runs one version per model in comparison_models.</div>
       </div>
       <div>
         <label>Prompt path</label>
         <input name="prompt_path" value="{{ values.prompt_path }}">
       </div>
       <div>
-        <label>Gabarito path</label>
-        <input name="gabarito_path" value="{{ values.gabarito_path }}">
+        <label>Benchmark path</label>
+        <input name="benchmark_path" value="{{ values.benchmark_path }}">
       </div>
     </div>
   </section>
@@ -740,12 +751,12 @@ _TEMPLATES: Mapping[str, str] = {
     <div class="panel">
       <label>Prompt</label>
       <textarea name="prompt_content">{{ values.prompt_content }}</textarea>
-      <div class="help">Se preenchido, este conteúdo vence o caminho informado.</div>
+      <div class="help">When provided, this content takes precedence over the specified path.</div>
     </div>
     <div class="panel">
-      <label>Gabarito YAML/JSON</label>
-      <textarea name="gabarito_content">{{ values.gabarito_content }}</textarea>
-      <div class="help">Casos, expected_output, assertion, weights e tags vivem aqui.</div>
+      <label>Benchmark YAML/JSON</label>
+      <textarea name="benchmark_content">{{ values.benchmark_content }}</textarea>
+      <div class="help">Cases, expected_output, assertion, weights, and tags belong here.</div>
     </div>
   </section>
   <section class="panel">
@@ -756,25 +767,25 @@ _TEMPLATES: Mapping[str, str] = {
       </div>
       <div>
         <label>Config YAML</label>
-        <div class="help">Este editor cobre todos os parâmetros da run: modelos, budgets, output_format, split, judge, rate limit e multi-objective.</div>
+        <div class="help">This editor covers all run parameters: models, budgets, output_format, split, judge, rate limit, and multi-objective.</div>
       </div>
     </div>
     <textarea name="config_content">{{ values.config_content }}</textarea>
   </section>
   <section class="panel">
-    <h2>Leitura dos parâmetros</h2>
+    <h2>Understanding the parameters</h2>
     <div class="grid-3">
-      <p><strong>threshold</strong><br><span class="muted">Score global de parada, em escala 0-100.</span></p>
-      <p><strong>max_iterations</strong><br><span class="muted">Quantidade máxima de versões, incluindo v0.</span></p>
-      <p><strong>output_format</strong><br><span class="muted">Contrato pedido ao provider; a assertion mede se foi cumprido.</span></p>
-      <p><strong>use_gabarito_split</strong><br><span class="muted">Separa train/val/test para reduzir overfitting.</span></p>
-      <p><strong>rate_limit</strong><br><span class="muted">Controla concorrência e retry por modelo.</span></p>
-      <p><strong>field_by_field.weights</strong><br><span class="muted">Fica no gabarito, não no config.</span></p>
+      <p><strong>threshold</strong><br><span class="muted">Global stopping score on a 0-100 scale.</span></p>
+      <p><strong>max_iterations</strong><br><span class="muted">Maximum number of versions, including v0.</span></p>
+      <p><strong>output_format</strong><br><span class="muted">Contract requested from the provider; the assertion checks whether it was met.</span></p>
+      <p><strong>use_benchmark_split</strong><br><span class="muted">Splits train/val/test to reduce overfitting.</span></p>
+      <p><strong>rate_limit</strong><br><span class="muted">Controls concurrency and retries per model.</span></p>
+      <p><strong>field_by_field.weights</strong><br><span class="muted">Belongs in the benchmark, not in the config.</span></p>
     </div>
   </section>
   <div class="actions">
-    <button type="submit">Iniciar run</button>
-    <a class="button secondary" href="/">Cancelar</a>
+    <button type="submit">Start run</button>
+    <a class="button secondary" href="/">Cancel</a>
   </div>
 </form>
 {% endblock %}
@@ -785,19 +796,19 @@ _TEMPLATES: Mapping[str, str] = {
 <div class="page-head">
   <div>
     <h1>Task {{ task.id[:12] }}</h1>
-    <p class="muted">Status atualizado após cada execução em background.</p>
+    <p class="muted">Status updated after each background execution.</p>
   </div>
   <div class="actions"><a class="button secondary" href="/">Runs</a></div>
 </div>
 <div class="metrics">
   <div class="metric"><span>Status</span><strong>{{ task.status }}</strong></div>
-  <div class="metric"><span>Run</span><strong>{% if task.run_id %}<a href="/runs/{{ task.run_id }}">abrir</a>{% else %}-{% endif %}</strong></div>
-  <div class="metric"><span>Cancelamento</span><strong>{{ "sim" if task.cancel_requested else "não" }}</strong></div>
-  <div class="metric"><span>Atualizada</span><strong>{{ task.updated_at }}</strong></div>
+  <div class="metric"><span>Run</span><strong>{% if task.run_id %}<a href="/runs/{{ task.run_id }}">open</a>{% else %}-{% endif %}</strong></div>
+  <div class="metric"><span>Cancellation</span><strong>{{ "yes" if task.cancel_requested else "no" }}</strong></div>
+  <div class="metric"><span>Updated</span><strong>{{ task.updated_at }}</strong></div>
 </div>
 {% if task.error %}<div class="error">{{ task.error }}</div>{% endif %}
 {% if task.status not in ["completed", "failed", "cancelled"] %}
-<form method="post" action="/tasks/{{ task.id }}/cancel"><button class="danger" type="submit">Cancelar task</button></form>
+<form method="post" action="/tasks/{{ task.id }}/cancel"><button class="danger" type="submit">Cancel task</button></form>
 {% endif %}
 {% if task.status in ["queued", "running", "cancel_requested"] %}
 <script>setTimeout(function(){ window.location.reload(); }, 2500);</script>
@@ -815,10 +826,10 @@ _TEMPLATES: Mapping[str, str] = {
   </div>
   <div class="actions">
     <a class="button secondary" href="/runs/{{ run.id }}/diff">Diff v0 → best</a>
-    <a class="button secondary" href="/runs/{{ run.id }}/regressions">Regressões</a>
+    <a class="button secondary" href="/runs/{{ run.id }}/regressions">Regressions</a>
     <a class="button secondary" href="/runs/{{ run.id }}/reports/html">Report HTML</a>
     {% if run.status in ["completed", "failed", "aborted"] %}
-    <a class="button secondary" href="/runs/{{ run.id }}/reports/pdf/download">Baixar PDF</a>
+    <a class="button secondary" href="/runs/{{ run.id }}/reports/pdf/download">Download PDF</a>
     {% endif %}
     <a class="button secondary" href="/api/runs/{{ run.id }}">JSON</a>
   </div>
@@ -828,24 +839,24 @@ _TEMPLATES: Mapping[str, str] = {
   <div class="metric"><span>Best score</span><strong>{{ best.score|score if best else "-" }}</strong></div>
   <div class="metric"><span>Pass rate</span><strong>{{ best.score_report.pass_rate|percent if best else "-" }}</strong></div>
   <div class="metric"><span>Threshold</span><strong>{{ run.config.threshold|score }}</strong></div>
-  <div class="metric"><span>Custo</span><strong>{{ run.total_cost_usd|money }}</strong></div>
+  <div class="metric"><span>Cost</span><strong>{{ run.total_cost_usd|money }}</strong></div>
   <div class="metric"><span>p95 latency</span><strong>{{ "%.0f ms"|format(best.score_report.operational.p95_latency_ms) if best else "-" }}</strong></div>
 </div>
 <div class="panel">
-  <h2>Próximo passo sugerido</h2>
+  <h2>Suggested next step</h2>
   <p>{{ hint }}</p>
   <p class="muted">Target: {{ model_label(run.config.target_model) }} · Reasoning: {{ model_label(run.config.reasoning_model) }}</p>
 </div>
 {% if run.comparison_summary %}
 <div class="metrics">
-  <div class="metric"><span>Melhor score</span><strong>{{ run.comparison_summary.best_score.label }}</strong></div>
-  <div class="metric"><span>Menor custo</span><strong>{{ run.comparison_summary.lowest_cost.label }}</strong></div>
-  <div class="metric"><span>Melhor custo-benefício</span><strong>{{ run.comparison_summary.best_value.label }}</strong></div>
+  <div class="metric"><span>Best score</span><strong>{{ run.comparison_summary.best_score.label }}</strong></div>
+  <div class="metric"><span>Lowest cost</span><strong>{{ run.comparison_summary.lowest_cost.label }}</strong></div>
+  <div class="metric"><span>Best value</span><strong>{{ run.comparison_summary.best_value.label }}</strong></div>
 </div>
 <section class="panel">
-  <h2>Comparação de modelos</h2>
+  <h2>Model comparison</h2>
   <table>
-    <thead><tr><th>Modelo</th><th>Score</th><th>Pass rate</th><th>Custo</th><th>p95</th><th>Cached tokens</th></tr></thead>
+    <thead><tr><th>Model</th><th>Score</th><th>Pass rate</th><th>Cost</th><th>p95</th><th>Cached tokens</th></tr></thead>
     <tbody>
     {% for iteration in run.iterations %}
       <tr>
@@ -860,9 +871,9 @@ _TEMPLATES: Mapping[str, str] = {
     </tbody>
   </table>
   <details>
-    <summary>Vencedores por case</summary>
+    <summary>Winners by case</summary>
     <table>
-      <thead><tr><th>Case</th><th>Score</th><th>Custo</th><th>Custo-benefício</th></tr></thead>
+      <thead><tr><th>Case</th><th>Score</th><th>Cost</th><th>Value</th></tr></thead>
       <tbody>
       {% for winner in run.comparison_summary.case_winners %}
         <tr><td>{{ winner.test_case_id }}</td><td>{{ winner.best_score }}</td><td>{{ winner.lowest_cost }}</td><td>{{ winner.best_value }}</td></tr>
@@ -874,13 +885,13 @@ _TEMPLATES: Mapping[str, str] = {
 {% endif %}
 {% if run.task_contract %}
 <div class="panel">
-  <h2>Contrato da tarefa</h2>
+  <h2>Task contract</h2>
   <p class="muted">{{ run.task_contract.objective }}</p>
   {% if run.task_contract.literal_extraction_fields %}
-    <p><strong>Extração literal:</strong> {{ run.task_contract.literal_extraction_fields|join(", ") }}</p>
+    <p><strong>Literal extraction:</strong> {{ run.task_contract.literal_extraction_fields|join(", ") }}</p>
   {% endif %}
   <details>
-    <summary>Ver invariantes</summary>
+    <summary>View invariants</summary>
     <ul>
       {% for rule in run.task_contract.invariants %}
         <li>{{ rule.text }} <span class="muted">({{ rule.source }})</span></li>
@@ -894,7 +905,7 @@ _TEMPLATES: Mapping[str, str] = {
 {% endif %}
 <div class="grid-2">
   <section class="panel">
-    <h2>Evolução</h2>
+    <h2>Progress</h2>
     {% for iteration in run.iterations %}
       <div class="bar">
         <a href="/runs/{{ run.id }}/iterations/{{ iteration.version }}/verdicts">v{{ iteration.version }}</a>
@@ -904,22 +915,22 @@ _TEMPLATES: Mapping[str, str] = {
     {% endfor %}
   </section>
   <section class="panel">
-    <h2>Onde olhar primeiro</h2>
+    <h2>Where to look first</h2>
     {% if best and best.score_report.worst_case_ids %}
       <p><strong>Worst cases:</strong> {{ best.score_report.worst_case_ids|join(", ") }}</p>
     {% else %}
-      <p class="muted">Sem worst cases registrados.</p>
+      <p class="muted">No worst cases recorded.</p>
     {% endif %}
     {% if weak_tags %}
-      <p><strong>Tags mais fracas:</strong></p>
+      <p><strong>Weakest tags:</strong></p>
       <ul>{% for tag, score in weak_tags %}<li>{{ tag }}: {{ score|score }}</li>{% endfor %}</ul>
     {% endif %}
   </section>
 </div>
-<h2>Iterações</h2>
+<h2>Iterations</h2>
 <table>
   <thead>
-    <tr><th>Versão</th><th>Score</th><th>Pass rate</th><th>Custo</th><th>p95</th><th>Mudança</th><th>Ações</th></tr>
+    <tr><th>Version</th><th>Score</th><th>Pass rate</th><th>Cost</th><th>p95</th><th>Change</th><th>Actions</th></tr>
   </thead>
   <tbody>
   {% for iteration in run.iterations %}
@@ -932,9 +943,9 @@ _TEMPLATES: Mapping[str, str] = {
       <td>
         {{ iteration.diff_summary or "-" }}
         {% if iteration.refinement_repair_attempts %}
-          <br><span class="badge warn">{{ iteration.refinement_repair_attempts|length }} reparo(s)</span>
+          <br><span class="badge warn">{{ iteration.refinement_repair_attempts|length }} repair(s)</span>
           <details>
-            <summary>Tentativas do reasoning</summary>
+            <summary>Reasoning attempts</summary>
             <ol>
               {% for attempt in iteration.refinement_repair_attempts %}
                 <li>
@@ -949,7 +960,7 @@ _TEMPLATES: Mapping[str, str] = {
           </details>
         {% endif %}
         {% if iteration.refinement_rejected_reason %}
-          <br><span class="badge bad">refino rejeitado</span>
+          <br><span class="badge bad">refinement rejected</span>
           <br><span class="muted">{{ iteration.refinement_rejected_reason }}</span>
         {% endif %}
       </td>
@@ -974,16 +985,16 @@ _TEMPLATES: Mapping[str, str] = {
   <div>
     <p><a href="/runs/{{ run.id }}">Run {{ run.id[:12] }}</a></p>
     <h1>Verdicts {{ version }}</h1>
-    <p class="muted">Filtre falhas, regressões e assertions para achar o primeiro ponto de ação.</p>
+    <p class="muted">Filter failures, regressions, and assertions to find the first actionable issue.</p>
   </div>
 </div>
 {% if iteration is defined %}
   <section class="panel">
-    <h2>Prompt utilizado</h2>
+    <h2>Prompt used</h2>
     <p class="muted">
-      Este é o prompt da v{{ iteration.version }} usado para executar todos os cases
-      listados abaixo. O placeholder como <code>{input}</code> é preenchido com o
-      input de cada case durante a execução.
+      This is the prompt from v{{ iteration.version }} used to execute all the cases
+      listed below. A placeholder such as <code>{input}</code> is filled with the
+      input of each case during execution.
     </p>
     <pre>{{ iteration.prompt.template }}</pre>
   </section>
@@ -996,7 +1007,7 @@ _TEMPLATES: Mapping[str, str] = {
   <div><label>Assertion</label><input name="assertion_type" value="{{ filters.assertion_type }}"></div>
   <div><label>Min score</label><input name="min_score" type="number" step="0.01" value="{{ filters.min_score or '' }}"></div>
   <div><label>Max score</label><input name="max_score" type="number" step="0.01" value="{{ filters.max_score or '' }}"></div>
-  <div><button type="submit">Filtrar</button></div>
+  <div><button type="submit">Filter</button></div>
 </form>
 <table>
   <thead>
@@ -1022,7 +1033,7 @@ _TEMPLATES: Mapping[str, str] = {
       <td>{{ verdict.test_case.tags|join(", ") }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7">Nenhum verdict encontrado.</td></tr>
+    <tr><td colspan="7">No verdicts found.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -1036,7 +1047,7 @@ _TEMPLATES: Mapping[str, str] = {
 <form method="get" class="panel filters">
   <div><label>From</label><input name="from_version" type="number" value="{{ left.version }}"></div>
   <div><label>To</label><input name="to_version" value="{{ right.version }}"></div>
-  <div><button type="submit">Atualizar</button></div>
+  <div><button type="submit">Update</button></div>
 </form>
 <pre>{{ diff }}</pre>
 {% endblock %}
@@ -1047,7 +1058,7 @@ _TEMPLATES: Mapping[str, str] = {
 <p><a href="/runs/{{ run.id }}">Run {{ run.id[:12] }}</a></p>
 <h1>Report {{ format }}</h1>
 <div class="panel">
-  <p>Report gerado em:</p>
+  <p>Report generated at:</p>
   <pre>{{ path }}</pre>
 </div>
 {% endblock %}
@@ -1058,13 +1069,13 @@ _TEMPLATES: Mapping[str, str] = {
 <p><a href="/">Runs</a></p>
 <h1>Compare Runs</h1>
 <table>
-  <thead><tr><th>Métrica</th><th>{{ left.id[:12] }}</th><th>{{ right.id[:12] }}</th></tr></thead>
+  <thead><tr><th>Metric</th><th>{{ left.id[:12] }}</th><th>{{ right.id[:12] }}</th></tr></thead>
   <tbody>
     <tr><td>Best score</td><td>{{ left_best.score|score if left_best else "-" }}</td><td>{{ right_best.score|score if right_best else "-" }}</td></tr>
     <tr><td>Pass rate</td><td>{{ left_best.score_report.pass_rate|percent if left_best else "-" }}</td><td>{{ right_best.score_report.pass_rate|percent if right_best else "-" }}</td></tr>
-    <tr><td>Iterações</td><td>{{ left.iterations|length }}</td><td>{{ right.iterations|length }}</td></tr>
-    <tr><td>Custo</td><td>{{ left.total_cost_usd|money }}</td><td>{{ right.total_cost_usd|money }}</td></tr>
-    <tr><td>Parada</td><td>{{ left.stop_reason|stop_label }}</td><td>{{ right.stop_reason|stop_label }}</td></tr>
+    <tr><td>Iterations</td><td>{{ left.iterations|length }}</td><td>{{ right.iterations|length }}</td></tr>
+    <tr><td>Cost</td><td>{{ left.total_cost_usd|money }}</td><td>{{ right.total_cost_usd|money }}</td></tr>
+    <tr><td>Stop reason</td><td>{{ left.stop_reason|stop_label }}</td><td>{{ right.stop_reason|stop_label }}</td></tr>
   </tbody>
 </table>
 {% endblock %}

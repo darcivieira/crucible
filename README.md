@@ -5,148 +5,142 @@
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Crucible é um framework pragmático para otimização empírica de prompts. Ele executa
-um prompt contra um gabarito versionado, mede qualidade/custo/latência, usa um modelo
-de raciocínio para diagnosticar falhas, refina o prompt e mantém o melhor prompt
-encontrado durante a run.
+Crucible is a pragmatic framework for empirical optimization of prompts. It executes a prompt
+against a versioned benchmark, measures quality/cost/latency, uses a reasoning model to diagnose
+failures, refines the prompt and maintains the best prompt found during the run.
 
-O projeto é local-first: CLI e SDK são as interfaces principais, SQLite guarda o
-histórico consultável, relatórios são artefatos estáticos, e dashboard/API são
-interfaces locais opcionais sobre os mesmos dados.
+The project is local-first: CLI and SDK are the main interfaces, SQLite saves the query history,
+reports are static artifacts, and dashboard/API are optional local interfaces on the same data.
 
-## O Que Ele Faz
+## What It Does
 
-- Valida prompts contra casos de teste ponderados.
-- Otimiza prompts usando um `target_model` e um `reasoning_model`.
-- Suporta Ollama, OpenAI-compatible APIs, Anthropic, Google, OpenRouter, vLLM,
-  llama.cpp e provider fake para testes.
-- Persiste runs em `.crucible/` para auditoria, comparação e reprodutibilidade.
-- Gera relatórios HTML, JSON e PDF.
-- Exporta verdicts em CSV/Parquet e o melhor prompt em texto.
-- Registra Pareto frontier para otimização qualidade x custo x latência.
-- Sugere novos casos de gabarito a partir de falhas, regressões e instabilidade.
-- Oferece CLI, SDK Python, dashboard local e REST API.
-- Permite assertions e importadores customizados via plugins.
-- Inclui scaffold de extensão VSCode.
+- Validates prompts against weighted test cases.
+- Optimizes prompts using a `target_model` and a `reasoning_model`.
+- Supports Ollama, OpenAI-compatible APIs, Anthropic, Google, OpenRouter, vLLM, llama.cpp and
+  fake provider for testing.
+- Persists runs in `.crucible/` for audit, comparison and reproducibility.
+- Generates HTML, JSON and PDF reports.
+- Exports verdicts in CSV/Parquet and the best prompt in text.
+- Tracks the Pareto frontier for quality × cost × latency optimization.
+- Suggests new benchmark cases from failures, regressions and instability.
+- Offers CLI, Python SDK, local dashboard and REST API.
+- Allows assertions and custom importers via plugins.
+- Includes VSCode extension scaffold.
 
 ## Quickstart
 
-O fluxo normal não começa otimizando. Primeiro você valida se o prompt, o gabarito e
-os providers estão funcionando; depois estima custo; só então roda a otimização.
+The normal workflow starts with validation. First, check that the prompt, benchmark, and providers
+work; then estimate the cost; finally, run optimization.
 
 ```bash
 uv sync
 uv run crucible init ./my-prompt
-uv run crucible validate --prompt ./my-prompt/prompt.txt --gabarito ./my-prompt/gabarito.yaml --config ./my-prompt/config.yaml
+uv run crucible validate --prompt ./my-prompt/prompt.txt --benchmark ./my-prompt/benchmark.yaml --config ./my-prompt/config.yaml
 uv run crucible estimate-cost --config ./my-prompt/config.yaml
 uv run crucible optimize --config ./my-prompt/config.yaml
 uv run crucible compare-models --config ./my-prompt/config.yaml
 uv run crucible serve
 ```
 
-Abra `http://127.0.0.1:7777` para inspecionar o histórico local.
+Open `http://127.0.0.1:7777` to inspect the local history.
 
-O template criado pelo `init` usa Ollama como modelo alvo e OpenAI como modelo de
-raciocínio. Ajuste `config.yaml` antes de rodar se esses providers não estiverem
-disponíveis.
+The template created by `init` uses Ollama as a target model and OpenAI as a reasoning model. Adjust
+`config.yaml` before running if these providers are not available.
 
-## Como Pensar No Fluxo
+## Understanding the Workflow
 
-`validate` responde: "o prompt atual passa no meu gabarito?".
+`validate` answers: "Does the current prompt pass my benchmark?"
 
-Ele executa apenas a versão atual do prompt, calcula score e mostra se o setup está
-correto. Use para depurar gabarito, provider, assertion e formato de saída.
+It executes the current prompt version, calculates its score, and checks the setup. Use it to debug
+the benchmark, provider, assertion, and output format.
 
-`optimize` responde: "o Crucible consegue melhorar este prompt?".
+`optimize` answers: "Can Crucible improve this prompt?"
 
-Ele executa o prompt, encontra falhas, pede ao `reasoning_model` um diagnóstico,
-gera uma nova versão do prompt e repete até bater threshold, budget ou outro critério
-de parada. A run sempre preserva o melhor prompt encontrado, não necessariamente o
-último.
+It executes the prompt, identifies failures, asks the `reasoning_model` for a diagnosis, generates a
+new prompt version, and repeats until it reaches the threshold, budget, or another stopping
+criterion. The run always preserves the best prompt found, which may differ from the latest version.
 
-`compare-models` responde: "qual target entrega melhor qualidade, custo e
-custo-benefício neste gabarito?". Ele usa `comparison_models` no `config.yaml` e
-executa uma iteração por modelo, sem refino.
+`compare-models` answers: "Which target offers the best quality, cost, and value on this benchmark?"
+It uses `comparison_models` in `config.yaml` and runs one iteration per model without refinement.
 
-## Uso Mínimo Via SDK
+## Minimal Use via SDK
 
 ```python
-from crucible import Gabarito, Optimizer, OptimizationConfig, Prompt
+from crucible import Benchmark, Optimizer, OptimizationConfig, Prompt
 
 config = OptimizationConfig.model_validate({...})
 prompt = Prompt.from_file("prompt.txt")
-gabarito = Gabarito.from_yaml("gabarito.yaml")
+benchmark = Benchmark.from_yaml("benchmark.yaml")
 
 optimizer = Optimizer(config)
-estimate = optimizer.estimate_cost(prompt, gabarito)
-run = await optimizer.optimize(prompt, gabarito)
+estimate = optimizer.estimate_cost(prompt, benchmark)
+run = await optimizer.optimize(prompt, benchmark)
 report_path = await optimizer.report(run.id, format="html")
 ```
 
-## Estado Local
+## Local State
 
-Crucible escreve estado local em `.crucible/`:
+Crucible writes local state in `.crucible/`:
 
-- `.crucible/crucible.sqlite`: índice consultável de runs, iterações e verdicts.
-- `.crucible/runs/`: payloads completos, JSONL de iterações/verdicts e melhor prompt.
-- `.crucible/reports/`: relatórios gerados.
-- `.crucible/cache/`: cache de execuções.
+- `.crucible/crucible.sqlite`: searchable index of runs, iterations and verdicts.
+- `.crucible/runs/`: full payloads, JSONL of iterations/verdicts and best prompt.
+- `.crucible/reports/`: reports generated.
+- `.crucible/cache/`: execution cache.
 
-Isso é intencional. Histórico de run é dado de produto, não arquivo temporário.
-Use `/tmp` apenas para execuções descartáveis.
+This is intentional. Run history is product data. Use `/tmp` only for disposable runs.
 
-## Comandos Comuns
+## Common Commands
 
 ```bash
 uv run crucible estimate-cost --config ./my-prompt/config.yaml
-uv run crucible validate --prompt prompt.txt --gabarito gabarito.yaml --config config.yaml
+uv run crucible validate --prompt prompt.txt --benchmark benchmark.yaml --config config.yaml
 uv run crucible optimize --config config.yaml
 uv run crucible list-runs
 uv run crucible show-run --run latest
 uv run crucible report --run latest --format html
 uv run crucible export --run latest --format csv --output ./verdicts.csv
-uv run crucible split-gabarito --gabarito gabarito.yaml --output-dir ./splits
+uv run crucible split-benchmark --benchmark benchmark.yaml --output-dir ./splits
 uv run crucible serve
 uv run crucible api --port 7788
 ```
 
-## Documentação
+## Documentation
 
-Comece por aqui:
+Start here:
 
-- [Índice da documentação](docs/index.md)
+- [Documentation Index](docs/index.md)
 - [Quickstart](docs/quickstart.md)
-- [Tutorial end-to-end](docs/tutorials/customer-support-end-to-end.md)
-- [Conceitos](docs/concepts.md)
-- [Referência CLI](docs/cli.md)
-- [Configuração](docs/configuration.md)
-- [Gabaritos e Assertions](docs/gabaritos-and-assertions.md)
+- [End-to-end tutorial](docs/tutorials/customer-support-end-to-end.md)
+- [Concepts](docs/concepts.md)
+- [CLI Reference](docs/cli.md)
+- [Configuration](docs/configuration.md)
+- [Benchmarks and Assertions](docs/benchmarks-and-assertions.md)
 - [Scoring](docs/scoring.md)
 - [Providers](docs/providers.md)
-- [SDK Python](docs/sdk.md)
+- [Python SDK](docs/sdk.md)
 - [Dashboard](docs/dashboard.md)
 - [REST API](docs/api.md)
 - [Docker](docs/docker.md)
 - [Plugins](docs/plugins.md)
-- [Importadores e Exports](docs/importers-and-exports.md)
-- [Operação](docs/operations.md)
+- [Importers and Exports](docs/importers-and-exports.md)
+- [Operations](docs/operations.md)
 - [Release](docs/release.md)
-- [Arquitetura e Implementação](docs/architecture.md)
-- [Decisões Técnicas](docs/technical-decisions.md)
-- [UX e Interfaces](docs/interfaces.md)
-- [Desenvolvimento](docs/development.md)
-- [Contribuição](CONTRIBUTING.md)
-- [Segurança](SECURITY.md)
+- [Architecture and Implementation](docs/architecture.md)
+- [Technical Decisions](docs/technical-decisions.md)
+- [UX and Interfaces](docs/interfaces.md)
+- [Development](docs/development.md)
+- [Contribution](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
-Exemplos:
+Examples:
 
-- [Projeto básico](examples/basic/)
-- [Triagem de suporte](examples/customer-support-triage/)
-- [LLM-as-judge para risco](examples/llm-judge-risk/)
+- [Basic project](examples/basic/)
+- [Support Triage](examples/customer-support-triage/)
+- [LLM-as-judge for risk](examples/llm-judge-risk/)
 - [Train/val/test](examples/train-val-test/)
-- [Saída estruturada com JSON Schema](examples/structured-output/) com validação de
-  contrato, payload esperado e comparação campo a campo.
+- [Structured output with JSON Schema](examples/structured-output/) with contract validation,
+  expected payload and field-by-field comparison.
 
-## Licença
+## License
 
-Crucible é open source sob licença MIT.
+Crucible is open source under MIT license.

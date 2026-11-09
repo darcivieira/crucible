@@ -7,11 +7,11 @@ from typing import Any
 import yaml
 
 from crucible.modules.optimizer.domain.assertions import Contains, ExactMatch, JsonSchema, Regex
-from crucible.modules.optimizer.domain.models import Gabarito, TestCase
+from crucible.modules.optimizer.domain.models import Benchmark, TestCase
 from crucible.modules.optimizer.plugins.registry import get_plugin_registry
 
 
-def import_gabarito(path: Path, source: str) -> Gabarito:
+def import_benchmark(path: Path, source: str) -> Benchmark:
     text = path.read_text(encoding="utf-8")
     registry = get_plugin_registry()
     if source in registry.importers:
@@ -27,17 +27,17 @@ def import_gabarito(path: Path, source: str) -> Gabarito:
     raise ValueError(f"Unsupported importer: {source}")
 
 
-def import_jsonl(text: str, name: str = "jsonl-import") -> Gabarito:
+def import_jsonl(text: str, name: str = "jsonl-import") -> Benchmark:
     cases = []
     for index, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
             continue
         payload = json.loads(line)
         cases.append(_case_from_mapping(payload, default_id=f"case-{index:03d}"))
-    return Gabarito(name=name, version="imported", cases=cases)
+    return Benchmark(name=name, version="imported", cases=cases)
 
 
-def import_promptfoo(text: str, name: str = "promptfoo-import") -> Gabarito:
+def import_promptfoo(text: str, name: str = "promptfoo-import") -> Benchmark:
     payload = yaml.safe_load(text)
     tests = payload.get("tests") or payload.get("prompts", []) if isinstance(payload, dict) else []
     cases = []
@@ -58,13 +58,13 @@ def import_promptfoo(text: str, name: str = "promptfoo-import") -> Gabarito:
                 tags=_tags(item.get("tags")),
             )
         )
-    return Gabarito(name=name, version="promptfoo", cases=cases)
+    return Benchmark(name=name, version="promptfoo", cases=cases)
 
 
-def import_langsmith(text: str, name: str = "langsmith-import") -> Gabarito:
+def import_langsmith(text: str, name: str = "langsmith-import") -> Benchmark:
     payload = json.loads(text)
     examples = _examples_from_payload(payload)
-    return Gabarito(
+    return Benchmark(
         name=name,
         version="langsmith",
         cases=[
@@ -74,10 +74,10 @@ def import_langsmith(text: str, name: str = "langsmith-import") -> Gabarito:
     )
 
 
-def import_dspy(text: str, name: str = "dspy-import") -> Gabarito:
+def import_dspy(text: str, name: str = "dspy-import") -> Benchmark:
     payload = json.loads(text)
     examples = _examples_from_payload(payload)
-    return Gabarito(
+    return Benchmark(
         name=name,
         version="dspy",
         cases=[
@@ -185,3 +185,7 @@ def _tags(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
     return [str(value)]
+
+
+# Deprecated import name for existing plugin integrations.
+import_gabarito = import_benchmark

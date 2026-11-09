@@ -1,0 +1,12 @@
+name: structured-output
+version: v1
+description: Example benchmark for comparing a structured payload using the schema from config.
+cases:
+  - id: summary-001
+    input: "summary=overdue payment with a promise to settle within 7 days; risk=medium"
+    expected_output: |
+      {'summary': 'overdue payment with a promise to settle within 7 days', 'risk': 'medium'}
+    assertion:
+      type: json_schema
+    weight: 1.0
+    tags: [structured-output, payload-comparison]

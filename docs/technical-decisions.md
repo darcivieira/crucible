@@ -1,22 +1,21 @@
-# Decisões Técnicas
+# Technical Decisions
 
-Este documento registra as principais decisões de implementação do Crucible e o
-estado atual de cada uma.
+This document records Crucible’s main implementation decisions and their current status.
 
-## Asyncio Como Base
+## Asyncio As a Base
 
-O pipeline é async-first:
+The pipeline is async-first:
 
-- providers expõem `complete(...)` assíncrono;
-- o optimizer executa casos em paralelo;
-- CLI chama o fluxo async com `asyncio.run`;
-- API e dashboard rodam em FastAPI.
+- providers expose asynchronous `complete(...)`;
+- the optimizer executes cases in parallel;
+- CLI calls the async flow with `asyncio.run`;
+- API and dashboard run on FastAPI.
 
-Isso mantém o core simples e funciona tanto para providers locais quanto cloud.
+This keeps the core simple and works for both local and cloud providers.
 
-## Rate Limit Por Provider
+## Rate Limit By Provider
 
-Cada `ModelSpec` declara limites:
+Each `ModelSpec` declares limits:
 
 ```yaml
 rate_limit:
@@ -26,13 +25,12 @@ rate_limit:
   retry_backoff_seconds: 0.5
 ```
 
-`RateLimitedProvider` aplica concorrência e requests por minuto ao redor do provider
-real. Para GPU local, use `max_concurrent: 1`; para cloud, aumente conforme o limite
-da conta.
+`RateLimitedProvider` enforces concurrency and requests per minute around the real provider. For
+local GPU, use `max_concurrent: 1`; for cloud, increase according to the account limit.
 
-## Retry Em Erros Transitórios
+## Retries for Transient Errors
 
-Providers HTTP fazem retry em respostas transitórias:
+HTTP providers retry transient responses:
 
 - `429`
 - `500`
@@ -40,61 +38,60 @@ Providers HTTP fazem retry em respostas transitórias:
 - `503`
 - `504`
 
-O backoff é exponencial:
+The backoff is exponential:
 
 ```text
 retry_backoff_seconds * 2 ** attempt
 ```
 
-Erros finais sobem como `ProviderError`.
+Final errors are raised as `ProviderError`.
 
-## Cache Local
+## Local Cache
 
-O cache evita pagar novamente por execuções idênticas. A chave considera:
+The cache avoids paying again for identical executions. The key considers:
 
-- hash do prompt;
-- input do caso;
-- provider/modelo;
-- hash dos parâmetros do modelo.
+- prompt hash;
+- case input;
+- provider/model;
+- hash of the model parameters.
 
-O adapter atual usa JSONL em `.crucible/cache/`, coerente com o modelo local-first.
+The current adapter uses JSONL in `.crucible/cache/`, consistent with the local-first model.
 
-## SQLite Como Índice Persistente
+## SQLite As a Persistent Index
 
-SQLite é o default porque:
+SQLite is default because:
 
-- não exige serviço externo;
-- funciona bem com CLI e SDK local;
-- alimenta dashboard/API sem parsing de arquivos;
-- preserva histórico de runs para comparação.
+- does not require external service;
+- works well with CLI and local SDK;
+- feeds dashboard/API without parsing files;
+- preserves history of runs for comparison.
 
-Arquivos em `.crucible/runs/` continuam existindo para inspeção e debugging. Postgres
-é uma evolução possível atrás do mesmo contrato de store.
+Files in `.crucible/runs/` continue to exist for inspection and debugging. Postgres is a possible
+evolution behind the same store contract.
 
-## Reports Estáticos
+## Static Reports
 
-HTML, JSON e PDF são artefatos gerados a partir da run persistida. Isso permite:
+HTML, JSON, and PDF artifacts are generated from the persisted run. This allows:
 
-- compartilhar resultado sem subir dashboard;
-- anexar reports em CI;
-- arquivar snapshots de decisão.
+- share result without starting the dashboard;
+- attach reports to CI;
+- archive decision snapshots.
 
-Reports podem conter dados sensíveis; trate como artefato privado quando o gabarito
-contiver dados reais.
+Reports may contain sensitive data; treat it as a private artifact when the benchmark contains real
+data.
 
-## Variância E Determinismo
+## Variance and Determinism
 
-Mesmo com `temperature: 0.0`, modelos locais quantizados ou providers remotos podem
-variar. O Crucible oferece:
+Even with `temperature: 0.0`, quantized local models or remote providers may vary. Crucible offers:
 
-- `seed` em `ModelParams`, quando o provider suporta;
-- `n_runs_per_case` para repetição;
-- flag de instabilidade em detalhes da assertion;
-- train/val/test para reduzir overfitting.
+- `seed` in `ModelParams` when the provider supports;
+- `n_runs_per_case` for repetition;
+- flag of instability in assertion details;
+- train/val/test to reduce overfitting.
 
 ## Budget Enforcement
 
-O optimizer para por:
+The optimizer stops for:
 
 - `threshold_reached`;
 - `max_iterations`;
@@ -103,25 +100,23 @@ O optimizer para por:
 - `plateau`;
 - `no_failures`.
 
-`max_cost_usd`, `max_iterations` e `max_wallclock_seconds` devem ser configurados em
-toda run real.
+`max_cost_usd`, `max_iterations` and `max_wallclock_seconds` must be configured for every real run.
 
-## Backend De Execução
+## Run Backend
 
-Backends disponíveis:
+Backends available:
 
-- `local`: `asyncio.gather` direto.
-- `distributed`: pool assíncrono local limitado por `distributed_workers`.
-- `ray`: executor opcional via Ray.
-- `dask`: executor opcional via Dask Distributed.
+- `local`: `asyncio.gather` direct.
+- `distributed`: local asynchronous pool limited by `distributed_workers`.
+- `ray`: optional executor via Ray.
+- `dask`: optional executor via Dask Distributed.
 
-Ray/Dask rodam atrás do mesmo contrato de `ExecutionBackend`. Como jobs Python
-precisam ser serializáveis para esses executores, workloads com providers customizados
-devem ser testados antes de uso pesado.
+Ray/Dask run behind the same `ExecutionBackend` contract. As Python jobs need to be serializable for
+these executors, workloads with customized providers should be tested before heavy use.
 
-## Limites Atuais
+## Current Limits
 
-- Não há migração formal de schema SQLite.
-- API não tem autenticação.
-- Dashboard é server-side simples, sem frontend SPA.
-- Observability estruturada existe via logs; OpenTelemetry ainda não foi implementado.
+- There is no formal SQLite schema migration.
+- API has no authentication.
+- Dashboard is simple server-side without SPA frontend.
+- Structured observability exists through logs; OpenTelemetry has not yet been implemented.

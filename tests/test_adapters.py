@@ -63,7 +63,7 @@ async def test_file_run_store_round_trip(tmp_path):
         target_model=_spec("fake"),
         reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
     )
-    run = OptimizationRun(config=config, gabarito_hash="g", initial_prompt_hash="p")
+    run = OptimizationRun(config=config, benchmark_hash="g", initial_prompt_hash="p")
     store = FileRunStore(tmp_path)
 
     await store.save_run(run)
@@ -79,7 +79,7 @@ async def test_sqlite_run_store_round_trip_and_latest(tmp_path):
         target_model=_spec("fake"),
         reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
     )
-    run = OptimizationRun(config=config, gabarito_hash="g", initial_prompt_hash="p")
+    run = OptimizationRun(config=config, benchmark_hash="g", initial_prompt_hash="p")
     store = SQLiteRunStore(tmp_path / "runs.sqlite")
 
     await store.save_run(run)
@@ -196,9 +196,7 @@ def test_provider_payloads_include_structured_output_format():
     assert (
         openai_responses.parse(
             {
-                "output": [
-                    {"content": [{"type": "output_text", "text": '{"summary":"ok"}'}]}
-                ],
+                "output": [{"content": [{"type": "output_text", "text": '{"summary":"ok"}'}]}],
                 "usage": {"input_tokens": 1, "output_tokens": 2},
             }
         ).text

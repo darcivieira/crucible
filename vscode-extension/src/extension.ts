@@ -29,11 +29,11 @@ function runCrucible(action: "validate" | "optimize") {
   const commandPrefix = config.get<string>("command", "uv run crucible");
   const configPath = config.get<string>("configPath", "config.yaml");
   const promptPath = config.get<string>("promptPath", "prompt.txt");
-  const gabaritoPath = config.get<string>("gabaritoPath", "gabarito.yaml");
+  const benchmarkPath = resolveBenchmarkPath(config);
   const args =
     action === "validate"
-      ? ["validate", "--prompt", promptPath, "--gabarito", gabaritoPath, "--config", configPath]
-      : ["optimize", "--config", configPath, "--prompt", promptPath, "--gabarito", gabaritoPath];
+      ? ["validate", "--prompt", promptPath, "--benchmark", benchmarkPath, "--config", configPath]
+      : ["optimize", "--config", configPath, "--prompt", promptPath, "--benchmark", benchmarkPath];
 
   const [command, ...prefixArgs] = splitCommand(commandPrefix);
   const output = vscode.window.createOutputChannel("Crucible");
@@ -61,14 +61,14 @@ async function selectFiles() {
 
   const prompt = await pickFile(workspace, "Select prompt file");
   if (!prompt) return;
-  const gabarito = await pickFile(workspace, "Select gabarito file");
-  if (!gabarito) return;
+  const benchmark = await pickFile(workspace, "Select benchmark file");
+  if (!benchmark) return;
   const config = await pickFile(workspace, "Select config file");
   if (!config) return;
 
   const settings = vscode.workspace.getConfiguration("crucible");
   await settings.update("promptPath", relative(workspace, prompt), vscode.ConfigurationTarget.Workspace);
-  await settings.update("gabaritoPath", relative(workspace, gabarito), vscode.ConfigurationTarget.Workspace);
+  await settings.update("benchmarkPath", relative(workspace, benchmark), vscode.ConfigurationTarget.Workspace);
   await settings.update("configPath", relative(workspace, config), vscode.ConfigurationTarget.Workspace);
   vscode.window.showInformationMessage("Crucible files configured for this workspace.");
 }
@@ -149,4 +149,10 @@ function relative(workspace: string, file: string): string {
 
 function splitCommand(command: string): string[] {
   return command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, "")) ?? [];
+}
+
+function resolveBenchmarkPath(config: vscode.WorkspaceConfiguration): string {
+  const current = config.inspect<string>("benchmarkPath");
+  const explicit = current?.workspaceFolderValue ?? current?.workspaceValue ?? current?.globalValue;
+  return explicit ?? config.get<string>("gabaritoPath") ?? config.get<string>("benchmarkPath", "benchmark.yaml");
 }

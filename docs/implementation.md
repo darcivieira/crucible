@@ -1,12 +1,12 @@
-# Implementação
+# Implementation
 
-Este documento foi mantido como atalho para links antigos.
+This document was kept as a shortcut to old links.
 
-A documentação de implementação foi consolidada em:
+The implementation documentation has been consolidated into:
 
-- [Arquitetura e Implementação](architecture.md)
-- [Desenvolvimento](development.md)
+- [Architecture and Implementation](architecture.md)
+- [Development](development.md)
 - [Providers](providers.md)
 - [Plugins](plugins.md)
 
-Para contribuir com código, comece por [Desenvolvimento](development.md).
+To contribute code, start with [Development](development.md).

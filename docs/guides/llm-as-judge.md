@@ -1,31 +1,31 @@
-# Guia: LLM-as-Judge
+# Guide: LLM-as-Judge
 
-Use LLM-as-judge quando a resposta correta é subjetiva demais para `contains`,
-`regex` ou comparação JSON.
+Use LLM-as-judge when the correct answer is too subjective for `contains`, `regex` or JSON
+comparison.
 
-## Quando Usar
+## When to Use
 
-- Resumos.
-- Análise de risco.
-- Respostas com justificativa.
-- Tarefas em que existem múltiplas respostas aceitáveis.
+- Summaries.
+- Risk analysis.
+- Answers with justification.
+- Tasks where there are multiple acceptable answers.
 
-Evite LLM-as-judge quando uma assertion determinística resolve. Ele é mais lento,
-mais caro e precisa de rubrica clara.
+Avoid LLM-as-judge when a deterministic assertion meets the requirement. It is slower, more
+expensive and needs a clear rubric.
 
-## Gabarito
+## Benchmark
 
 ```yaml
 assertion:
   type: llm_judge
   rubric: >
-    A resposta deve identificar corretamente o risco, justificar com evidencias do
-    input e nao inventar fatos.
+    The response must correctly identify the risk, justify it with evidence from
+    the input, and avoid inventing facts.
   pass_threshold: 0.75
   position_swap: true
 ```
 
-`position_swap` avalia expected/actual em duas ordens para reduzir viés de posição.
+`position_swap` evaluates expected/actual in two orders to reduce position bias.
 
 ## Config
 
@@ -36,11 +36,11 @@ judge_models:
     role: judge
 ```
 
-Se `judge_models` não for configurado, Crucible usa o `reasoning_model`.
+If `judge_models` is not configured, Crucible uses `reasoning_model`.
 
-## O Que Esperar
+## What to Expect
 
-- O score vira parcial, de `0.0` a `1.0`.
-- O report inclui payloads dos judges.
-- Custo sobe, porque cada avaliação chama um modelo judge.
-- Use poucos casos primeiro e aumente quando a rubrica estiver estável.
+- The score becomes partial, from `0.0` to `1.0`.
+- The report includes judge payloads.
+- Cost goes up, because each evaluation calls for a judge model.
+- Use few cases first and increase when the rubric is stable.

@@ -36,12 +36,12 @@ def test_dashboard_routes(tmp_path):
     assert run.id in index_response.text
     assert detail_response.status_code == 200
     assert "Best prompt" in detail_response.text
-    assert "Baixar PDF" in detail_response.text
+    assert "Download PDF" in detail_response.text
     assert diff_response.status_code == 200
     assert "+novo {input}" in diff_response.text
     assert verdicts_response.status_code == 200
     assert "Verdicts 1" in verdicts_response.text
-    assert "Prompt utilizado" in verdicts_response.text
+    assert "Prompt used" in verdicts_response.text
     assert "novo {input}" in verdicts_response.text
     assert regressions_response.status_code == 200
     assert compare_response.status_code == 200
@@ -60,8 +60,8 @@ def test_dashboard_shows_comparison_summary(tmp_path):
     response = client.get(f"/runs/{run.id}")
 
     assert response.status_code == 200
-    assert "Comparação de modelos" in response.text
-    assert "Melhor custo-benefício" in response.text
+    assert "Model comparison" in response.text
+    assert "Best value" in response.text
     assert "case" in response.text
 
 
@@ -87,9 +87,9 @@ def test_dashboard_blocks_pdf_download_for_unfinished_run(tmp_path):
     response = client.get(f"/runs/{run.id}/reports/pdf/download")
 
     assert detail.status_code == 200
-    assert "Baixar PDF" not in detail.text
+    assert "Download PDF" not in detail.text
     assert response.status_code == 409
-    assert response.json()["detail"] == "Run ainda não finalizada"
+    assert response.json()["detail"] == "Run has not finished yet"
 
 
 def test_dashboard_new_run_form_creates_validate_task(tmp_path):
@@ -101,7 +101,7 @@ def test_dashboard_new_run_form_creates_validate_task(tmp_path):
         data={
             "mode": "validate",
             "prompt_content": "{input}",
-            "gabarito_content": """
+            "benchmark_content": """
 name: sample
 version: v1
 cases:
@@ -145,13 +145,13 @@ def test_dashboard_new_run_form_shows_validation_errors(tmp_path):
         data={
             "mode": "optimize",
             "prompt_content": "{input}",
-            "gabarito_content": "not: a valid gabarito",
+            "benchmark_content": "not: a valid benchmark",
             "config_content": "not: a valid config",
         },
     )
 
     assert response.status_code == 422
-    assert "Não foi possível montar a run" in response.text
+    assert "Could not create the run" in response.text
 
 
 def test_dashboard_new_run_form_creates_compare_task(tmp_path):
@@ -163,7 +163,7 @@ def test_dashboard_new_run_form_creates_compare_task(tmp_path):
         data={
             "mode": "compare",
             "prompt_content": "{input}",
-            "gabarito_content": """
+            "benchmark_content": """
 name: sample
 version: v1
 cases:
@@ -207,7 +207,7 @@ def test_dashboard_filters_verdicts(tmp_path):
     response = client.get(f"/runs/{run.id}/iterations/1/verdicts?passed=false")
 
     assert response.status_code == 200
-    assert "Nenhum verdict encontrado" in response.text
+    assert "No verdicts found" in response.text
 
 
 def test_dashboard_returns_404_for_missing_run(tmp_path):
@@ -236,7 +236,7 @@ def _saved_run(store: SQLiteRunStore, status: str = "completed") -> Optimization
         target_model=ModelSpec(provider="fake", model_id="t", role="target"),
         reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
     )
-    run = OptimizationRun(config=config, gabarito_hash="g", initial_prompt_hash="p")
+    run = OptimizationRun(config=config, benchmark_hash="g", initial_prompt_hash="p")
     run.status = status
     run.iterations.extend(
         [
@@ -267,7 +267,7 @@ def _saved_comparison_run(store: SQLiteRunStore) -> OptimizationRun:
     run = OptimizationRun(
         run_mode="compare",
         config=config,
-        gabarito_hash="g",
+        benchmark_hash="g",
         initial_prompt_hash="p",
         status="completed",
         stop_reason="comparison_completed",

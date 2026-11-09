@@ -1,5 +1,5 @@
-Avalie o risco operacional descrito no texto. Responda com uma classificacao
-curta e uma justificativa baseada apenas no input.
+Evaluate the operational risk described in the text. Respond with a brief
+classification and a rationale based only on the input.
 
-Texto:
+Text:
 {input}

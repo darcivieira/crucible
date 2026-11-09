@@ -1,0 +1,15 @@
+name: structured-output-field-by-field
+version: v1
+description: Example benchmark for explicit field-by-field structured comparison.
+cases:
+  - id: summary-fields-001
+    input: "summary=overdue payment with a promise to settle within 7 days; risk=medium"
+    expected_output: |
+      {"summary": "overdue payment with a promise to settle within 7 days", "risk": "medium"}
+    assertion:
+      type: field_by_field
+      weights:
+        risk: 95
+        summary: 5
+    weight: 1.0
+    tags: [structured-output, field-by-field]

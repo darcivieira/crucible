@@ -1,8 +1,8 @@
-# Configuração
+# Configuration
 
-`config.yaml` mapeia diretamente para `OptimizationConfig`.
+`config.yaml` maps directly to `OptimizationConfig`.
 
-## Exemplo Completo
+## Complete Example
 
 ```yaml
 threshold: 95.0
@@ -17,7 +17,7 @@ max_failures_for_refinement: 10
 max_refinement_repair_attempts: 5
 instability_std_threshold_ms: 250.0
 
-use_gabarito_split: false
+use_benchmark_split: false
 train_ratio: 0.7
 val_ratio: 0.15
 
@@ -77,88 +77,89 @@ judge_models: []
 embedding_model: null
 ```
 
-## Campos De Otimização
+## Optimization Fields
 
-| Campo | Significado |
+| Field | Meaning |
 | --- | --- |
-| `threshold` | Para quando o melhor score atinge esse valor. Escala `0-100`. |
-| `max_iterations` | Número máximo de iterações. Inclui `v0`. |
-| `max_cost_usd` | Budget máximo de custo rastreado. |
-| `max_wallclock_seconds` | Budget de tempo real. |
-| `plateau_window` | Janela de scores recentes usada para detectar plateau. |
-| `plateau_min_delta` | Movimento mínimo considerado relevante. |
-| `parallelism` | Concorrência global por caso dentro de uma iteração. |
-| `n_runs_per_case` | Repete cada caso e escolhe o output majoritário. |
-| `max_failures_for_refinement` | Limite de falhas enviadas ao refiner. |
-| `max_refinement_repair_attempts` | Quantidade máxima de propostas que o `reasoning_model` pode tentar gerar para a mesma iteração antes da run parar com `reasoning_failed_to_refine`. Inclui a proposta inicial e os reparos. |
-| `instability_std_threshold_ms` | Desvio de latência usado para marcar instabilidade. |
-| `selection_strategy` | `quality` ou `multi_objective`. |
-| `active_learning_suggestions` | Quantidade de sugestões de novos casos ao final da run. |
-| `provider_cache` | Configura cache remoto do provider quando suportado. |
-| `comparison_models` | Lista de modelos alvo para `compare-models` ou modo `compare` do dashboard/API. |
-| `comparison_value_quality_weight` | Peso de qualidade no ranking de custo-benefício entre modelos. |
-| `comparison_value_cost_weight` | Peso de custo no ranking de custo-benefício entre modelos. |
-| `comparison_value_latency_weight` | Peso de latência no ranking de custo-benefício entre modelos. |
+| `threshold` | Stops when the best score reaches this value. `0-100` scale. |
+| `max_iterations` | Maximum number of iterations. Includes `v0`. |
+| `max_cost_usd` | Maximum tracked cost budget. |
+| `max_wallclock_seconds` | Real-time budget. |
+| `plateau_window` | Recent score window used to detect Plateau. |
+| `plateau_min_delta` | Minimum movement considered relevant. |
+| `parallelism` | Global concurrency per case within an iteration. |
+| `n_runs_per_case` | Repeat each case and choose the majority output. |
+| `max_failures_for_refinement` | Maximum number of failures sent to the refiner. |
+| `max_refinement_repair_attempts` | Maximum number of proposals that `reasoning_model` can try to generate for the same iteration before the run stops with `reasoning_failed_to_refine`. Includes the initial proposal and repairs. |
+| `instability_std_threshold_ms` | Latency deviation used to mark instability. |
+| `selection_strategy` | `quality` or `multi_objective`. |
+| `active_learning_suggestions` | Number of suggestions for new cases at the end of the run. |
+| `provider_cache` | Set remote caching of the provider when supported. |
+| `comparison_models` | List of target models for `compare-models` or Dashboard/API `compare` mode. |
+| `comparison_value_quality_weight` | Quality weight in the value for money ranking between models. |
+| `comparison_value_cost_weight` | Cost weight in the value for money ranking between models. |
+| `comparison_value_latency_weight` | Latency weight in the value for money ranking between models. |
 
-## Reparo De Refino
+## Refinement Repair
 
-Durante `optimize`, o `reasoning_model` não tem liberdade para mudar o contrato da
-tarefa. Depois de avaliar uma iteração, o Crucible pede uma proposta de novo prompt
-e valida essa proposta contra o contrato inferido do prompt inicial, `config.yaml` e
-gabarito.
+During `optimize`, `reasoning_model` is not free to change the contract of the task. After
+evaluating an iteration, Crucible asks for a new prompt proposal and validates this proposal against
+the inferred contract of the initial prompt, `config.yaml` and benchmark.
 
-Se a proposta violar o contrato, o Crucible não executa o `target_model` de novo com
-o mesmo prompt. Em vez disso, ele abre um subloop de reparo: envia ao
-`reasoning_model` a proposta rejeitada, as violações concretas e o contrato que deve
-ser preservado. Isso evita gastar chamadas de target em iterações repetidas.
+If the proposal violates the contract, Crucible does not execute `target_model` again with the same
+prompt. Instead, it opens a repair subloop: it sends `reasoning_model` the rejected proposal, the
+concrete violations and the contract that must be preserved. This avoids spending target calls on
+repeated iterations.
 
 ```yaml
 max_refinement_repair_attempts: 5
 ```
 
-Esse limite conta o total de propostas para uma mesma tentativa de refino: a proposta
-inicial mais os reparos. Com `5`, o reasoning tem até cinco chances de produzir um
-`new_prompt` válido. Se todas falharem, a run termina com:
+This limit counts the total of proposals for the same refining attempt: the initial proposal plus
+repairs. With `5`, the reasoning model has up to five chances of producing a valid `new_prompt`. If
+all
+fail, the run ends with:
 
 ```text
 stop_reason: reasoning_failed_to_refine
 ```
 
-Use esse sinal para revisar o modelo reasoning, o prompt inicial ou o gabarito. Ele
-normalmente aparece quando o reasoning insiste em remover uma regra crítica, trocar
-extração literal por explicação inferida, omitir `{input}` ou repetir o mesmo prompt.
+Use this signal to review the reasoning model, the initial prompt, or benchmark. It usually
+appears when the reasoning model insists on removing a critical rule, exchanging literal extraction
+for
+inferred explanation, omiting `{input}` or repeating the same prompt.
 
-## Sessão De Reasoning
+## Reasoning Session
 
-Durante `optimize`, cada run cria uma sessão local de reasoning. Ela não é
-compartilhada com outras tasks e não depende de memória nativa do provider. O
-Crucible registra cada diagnóstico, proposta de refino e reparo, incluindo prompt
-enviado ao reasoning, resposta bruta, payload parseado, violações e erros.
+During `optimize`, each run creates a local reasoning session. It is not shared with other tasks and
+does not depend on the provider's native memory. Crucible records each diagnosis, refinement
+proposal, and repair, including the prompt sent to the reasoning model, raw response, parsed
+payload, violations, and errors.
 
-Nas próximas chamadas da mesma run, o optimizer injeta um resumo compacto desse
-histórico no prompt do `reasoning_model`. Isso ajuda o modelo a lembrar o que já
-tentou, quais propostas foram rejeitadas e quais violações não deve repetir.
+In the next calls of the same run, the optimizer injects a compact summary of this history into the
+`reasoning_model` prompt. This helps the model remember what it has already tried, what proposals
+have been rejected, and what violations should not repeat.
 
-O histórico completo fica salvo no payload da run em `reasoning_session`. Isso é
-útil para auditoria pelo SDK/API/dashboard e para entender por que um refino foi
-aceito ou rejeitado. Não há configuração obrigatória para habilitar esse recurso:
-ele é automático em `optimize` e não é usado em `validate` nem em `compare`.
+The full history is saved on the run payload in `reasoning_session`. This is useful for auditing by
+SDK/API/dashboard and to understand why a refinement was accepted or rejected. There is no
+mandatory configuration to enable this feature: it is automatic in `optimize` and is not used in
+`validate` or `compare`.
 
-## Threshold Global E Métricas Por Campo
+## Global Threshold and Metrics By Field
 
-`threshold` é aplicado ao score global da run:
+`threshold` is applied to the overall run score:
 
 ```yaml
 threshold: 95.0
 ```
 
-Ele não configura, hoje, thresholds separados por chave de JSON. Para respostas
-estruturadas em que uma chave é mais importante que outra, configure pesos na
-assertion do gabarito:
+It currently does not configure separate thresholds for JSON keys. For structured responses where
+one key is
+more important than another, set weights in benchmark assertion:
 
 ```yaml
 expected_output: |
-  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+  {"classification": "Deadline", "text_validation": "Serve notice within 5 days."}
 assertion:
   type: field_by_field
   weights:
@@ -166,73 +167,70 @@ assertion:
     text_validation: 5
 ```
 
-Assim, o campo `classification` representa 95% do score daquele caso. O score global
-continua sendo a média ponderada dos casos.
+Thus, the `classification` field represents 95% of the score of that case. The global score remains
+the weighted average of the cases.
 
-Não coloque pesos de chave em `config.yaml`; eles pertencem ao gabarito porque fazem
-parte da regra de avaliação de cada caso. O `config.yaml` controla a run, providers,
-budgets e critérios globais de parada. O gabarito controla o que é considerado certo
-ou errado.
+Do not place key weights on `config.yaml`; they belong to the benchmark because they are part of the
+evaluation rule of each case. `config.yaml` controls run, providers, budgets and global stop
+criteria. Benchmark controls what is considered right or wrong.
 
-Também não existe, nesta versão, uma configuração como:
+In this version, there is also no configuration like:
 
 ```yaml
-# Nao implementado
+# Not implemented
 field_metrics:
   classification:
     threshold: 95.0
 ```
 
-Para evidenciar uma chave crítica hoje, use `field_by_field.weights`, tags de domínio
-nos casos e análise dos verdicts/exportações quando precisar de uma métrica agregada
-por chave.
+To highlight a critical key today, use `field_by_field.weights`, domain tags in cases, and analysis
+of verdicts/exports when you need an aggregated metric by key.
 
 ## Train/Val/Test
 
 ```yaml
-use_gabarito_split: true
+use_benchmark_split: true
 train_ratio: 0.7
 val_ratio: 0.15
 ```
 
-Quando habilitado:
+When enabled:
 
-- a otimização usa train;
-- o melhor prompt é validado em val e test;
-- os scores são guardados em `run.validation_scores`.
+- Optimization uses train;
+- the best prompt is validated in val and test;
+- the scores are stored in `run.validation_scores`.
 
-Use isso quando houver risco de overfitting no gabarito. O split é feito em memória
-durante o `optimize`; não é necessário criar arquivos separados.
+Use this when there is a risk of overfitting in the benchmark. Split is done in memory during
+`optimize`; it is not necessary to create separate files.
 
-O comportamento atual é determinístico:
+The current behavior is deterministic:
 
-1. ordena os casos por `case.id`;
-2. separa `train_ratio` para treino;
-3. separa `val_ratio` para validação;
-4. usa o restante como test.
+1. orders cases by `case.id`;
+2. separates `train_ratio` for training;
+3. separates `val_ratio` for validation;
+4. Use the rest as a test.
 
-Com `train_ratio: 0.7` e `val_ratio: 0.15`, um gabarito de 1000 casos fica com 700
-casos de train, 150 de val e 150 de test.
+With `train_ratio: 0.7` and `val_ratio: 0.15`, a benchmark of 1000 cases gets 700 train cases, 150
+val cases and 150 test cases.
 
-Essa divisão é reprodutível, mas pode ser enviesada se os IDs agruparem exemplos por
-tipo. Se o gabarito estiver ordenado por classe, origem ou data, intercale os casos
-antes de usar split.
+This division is reproducible, but it can be biased if IDs group examples by type. If the benchmark
+is sorted by class, source, or date, shuffle the cases before using the split.
 
-## Backend De Execução
+## Execution Backend
 
 ```yaml
 execution_backend: local
 distributed_workers: 4
 ```
 
-Valores disponíveis:
+Available values:
 
-- `local`: execução direta com `asyncio.gather`.
-- `distributed`: pool assíncrono local limitado por `distributed_workers`.
-- `ray`: backend opcional usando Ray.
-- `dask`: backend opcional usando Dask Distributed.
+- `local`: direct execution with `asyncio.gather`.
+- `distributed`: local asynchronous pool limited by `distributed_workers`.
+- `ray`: optional backend using Ray.
+- `dask`: optional backend using Dask Distributed.
 
-Ray/Dask são extras opcionais:
+Ray/Dask are optional extras:
 
 ```bash
 uv sync --extra distributed
@@ -247,17 +245,17 @@ objective_cost_weight: 0.2
 objective_latency_weight: 0.1
 ```
 
-Quando `selection_strategy` é `multi_objective`, `best_iteration` usa
-`objective_score`, e a run registra `pareto_frontier_versions`.
+When `selection_strategy` is `multi_objective`, `best_iteration` uses `objective_score`, and the run
+records `pareto_frontier_versions`.
 
-## Comparação De Modelos
+## Model Comparison
 
-`comparison_models` define os targets avaliados pelo comando `compare-models`, pela
-API com `mode: compare` e pelo dashboard em modo `Compare`.
+`comparison_models` defines the targets evaluated by the `compare-models` command, the API with
+`mode: compare` and the dashboard in `Compare` mode.
 
-Nesse modo, `target_model` e `reasoning_model` não são obrigatórios. Eles continuam
-obrigatórios para `validate`, `optimize` e `estimate-cost`, porque esses fluxos
-precisam de um target principal e de um modelo de raciocínio/judge padrão.
+In this mode, `target_model` and `reasoning_model` are not required. They remain mandatory for
+`validate`, `optimize` and `estimate-cost`, because these streams need a main target and a standard
+reasoning/judge model.
 
 ```yaml
 comparison_models:
@@ -285,19 +283,20 @@ comparison_models:
       cost_per_million_output_tokens_usd: 2.00
 ```
 
-Cada item roda uma única iteração com o mesmo prompt e o mesmo gabarito. A run
-resultante mostra:
+Each item runs a single iteration with the same prompt and the same benchmark. The resulting run
+shows:
 
-- score e pass rate por modelo;
-- custo total e p95 de latência por modelo;
-- tokens de entrada cacheados, quando o provider reporta essa métrica;
-- vencedor global por qualidade;
-- vencedor global por menor custo;
-- vencedor global por custo-benefício;
-- vencedores por caso.
+- score and pass rate per model;
+- total cost and p95 latency per model;
+- cached input tokens, when the provider reports this metric;
+- global winner by quality;
+- Global winner at lower cost;
+- overall value for money winner;
+- winners per case.
 
-O ranking de custo-benefício normaliza qualidade, custo e latência dentro da própria
-comparação. Ajuste os pesos quando quiser privilegiar preço ou tempo:
+The value for money ranking normalizes quality, cost and latency within the comparison itself.
+Adjust
+the weights when you want to favor price or time:
 
 ```yaml
 comparison_value_quality_weight: 0.7
@@ -305,13 +304,12 @@ comparison_value_cost_weight: 0.3
 comparison_value_latency_weight: 0.0
 ```
 
-Com os pesos acima, qualidade ainda domina, mas custo passa a desempatar de forma
-explícita. Se todos os pesos forem zero, o ranking volta a usar apenas qualidade.
+With the weights above, quality still dominates, but cost explicitly breaks ties. If all the
+weights are zero, the ranking again uses only quality.
 
-## Cache Remoto Do Provider
+## Remote Provider Cache
 
-`provider_cache` habilita recursos de cache do provider para reduzir custo quando o
-mesmo contexto é reutilizado.
+`provider_cache` enables provider cache capabilities to reduce cost when the same context is reused.
 
 ```yaml
 provider_cache:
@@ -322,30 +320,28 @@ provider_cache:
   openai_retention: 24h
 ```
 
-Use quando os inputs são grandes, quando você roda vários modelos/casos repetidos ou
-quando está comparando prompts sobre o mesmo material. O Crucible prepara o contexto
-cacheado antes de executar a iteração e registra `cached_tokens` nas métricas quando
-o provider devolve essa informação.
+Use when inputs are large, when you run multiple repeated models/cases or when you are comparing
+prompts against the same material. Crucible prepares the cached context before performing iteration
+and records `cached_tokens` in metrics when the provider returns this information.
 
-Campos:
+Fields:
 
-- `enabled`: liga o comportamento.
-- `ttl_seconds`: tempo de vida solicitado para caches explícitos, usado pelo Google.
-- `cache_inputs`: cria cache por `case.input`.
-- `on_error`: `fail` aborta se o cache remoto falhar; `fallback` segue sem cache e
-  registra warning na run.
-- `openai_retention`: `in_memory` ou `24h`, usado apenas como instrumentação para
-  OpenAI.
+- `enabled`: enables the behavior.
+- `ttl_seconds`: lifespan requested for explicit caches used by Google.
+- `cache_inputs`: creates cache by `case.input`.
+- `on_error`: `fail` aborts if the remote cache fails; `fallback` continues without cache and
+  registers warning on run.
+- `openai_retention`: `in_memory` or `24h`, used only as instrumentation for OpenAI.
 
-Hoje existem dois comportamentos diferentes:
+Today there are two different behaviors:
 
-- Google/Gemini usa cache explícito por input. O Crucible cria `cachedContents` e
-  passa o `cache_id` nas chamadas seguintes.
-- OpenAI usa prompt caching automático. Não existe um cache ID manual equivalente no
-  fluxo atual; o Crucible adiciona `prompt_cache_key`/retenção nos parâmetros quando
-  habilitado e registra `cached_tokens_in` quando a API reporta tokens cacheados.
+- Google/Gemini uses explicit input cache. Crucible creates `cachedContents` and passes `cache_id`
+  on the following calls.
+- OpenAI uses automatic prompt caching. There is no equivalent manual ID cache in the current
+  stream; Crucible adds `prompt_cache_key`/retention in parameters when enabled and records
+  `cached_tokens_in` when API reports cached tokens.
 
-Para custo com cache, declare também:
+For cache cost, also state:
 
 ```yaml
 target_model:
@@ -354,9 +350,9 @@ target_model:
   cost_per_million_output_tokens_usd: 4.00
 ```
 
-Se `cost_per_million_cached_input_tokens_usd` ficar em `0.0`, o Crucible usa o preço
-normal de input para os tokens cacheados. Isso evita subestimar custo por acidente
-quando você ainda não informou o preço correto do provider.
+If `cost_per_million_cached_input_tokens_usd` stays in `0.0`, Crucible uses the normal input price
+for cached tokens. This avoids underestimating cost by accident when you have not yet reported the
+correct price of the provider.
 
 ## Active Learning
 
@@ -364,8 +360,8 @@ quando você ainda não informou o preço correto do provider.
 active_learning_suggestions: 10
 ```
 
-Ao final da run, Crucible sugere casos para expansão do gabarito com base em falhas,
-regressões e outputs instáveis.
+At the end of the run, Crucible suggests cases for benchmark expansion based on failures,
+regressions, and unstable outputs.
 
 ## ModelSpec
 
@@ -406,17 +402,17 @@ output_format:
 
 ## Output Format
 
-`output_format` descreve o contrato de saída solicitado ao provider. Ele é diferente
-do prompt: o prompt orienta o modelo; o output format vai no payload da API quando o
-provider suporta saída estruturada.
+`output_format` describes the output contract requested from the provider. It is different from the
+prompt: the prompt guides the model; the output format goes on the API payload when the provider
+supports structured output.
 
-Valores:
+Values:
 
-- `text`: resposta livre, padrão.
-- `json_object`: pede JSON válido, sem garantir schema específico.
-- `json_schema`: pede aderência a um JSON Schema.
+- `text`: Free response, default.
+- `json_object`: requests valid JSON without ensuring specific schema.
+- `json_schema`: Requests adherence to a JSON Schema.
 
-Exemplo com OpenAI Responses API:
+Example with OpenAI Responses API:
 
 ```yaml
 target_model:
@@ -440,17 +436,17 @@ target_model:
           enum: [low, medium, high]
 ```
 
-No adapter OpenAI com `api_mode: responses`, isso é enviado como `text.format`. No
-modo Chat Completions e providers OpenAI-compatible, é enviado como
-`response_format`. Em Ollama, vira `format`.
+In the OpenAI adapter with `api_mode: responses`, this is sent as `text.format`. In Chat Completions
+mode and OpenAI-compatible providers, it is sent as `response_format`. In Ollama, it becomes
+`format`.
 
-Use `output_format` junto com uma assertion estrutural no gabarito, por exemplo
-`json_schema` ou `field_by_field`. O primeiro solicita o formato ao modelo; a
-assertion mede se o resultado cumpriu o contrato.
+Use `output_format` along with a structural assertion in the benchmark, e.g. `json_schema` or
+`field_by_field`. The first requests the output format from the model; the assertion measures
+whether the result
+has fulfilled the contract.
 
-Quando o gabarito traz um payload esperado, mas a assertion veio como
-`json_schema`, o Crucible usa o schema de `target_model.output_format` como base
-comparativa:
+When benchmark brings an expected payload, but assertion came as `json_schema`, Crucible uses
+`target_model.output_format` schema as a comparative basis:
 
 ```yaml
 target_model:
@@ -468,24 +464,24 @@ target_model:
 
 ```yaml
 expected_output: |
-  {'classification': 'Prazo', 'text_validation': 'Intime-se no prazo de 5 dias.'}
+  {'classification': 'Deadline', 'text_validation': 'Serve notice within 5 days.'}
 assertion:
   type: json_schema
 ```
 
-Nesse fluxo, `expected_output` e output real são parseados, ambos são validados contra
-o schema do config e depois comparados campo a campo. Isso é útil para gabaritos
-gerados automaticamente. Para gabaritos escritos manualmente, `field_by_field` deixa
-a intenção mais clara e permite pesos por campo.
+In this stream, `expected_output` and actual output are parsed, both are validated against config
+schema and then compared field by field. This is useful for automatically generated benchmarks. For
+manually written benchmarks, `field_by_field` makes the intention clearer and allows weights per
+field.
 
-Veja exemplos completos em `examples/structured-output/`.
+See full examples in `examples/structured-output/`.
 
-## Papéis
+## Roles
 
-- `target`: modelo que está sendo otimizado.
-- `reasoning`: modelo que diagnostica e refina.
-- `judge`: modelo usado por assertions LLM-as-judge.
-- `embedding`: modelo usado por `embedding_similarity`.
+- `target`: model that is being optimized.
+- `reasoning`: model that diagnoses and refines.
+- `judge`: model used by assertions LLM-as-judge.
+- `embedding`: model used by `embedding_similarity`.
 
 ## Embedding Model
 
@@ -496,8 +492,7 @@ embedding_model:
   role: embedding
 ```
 
-Quando configurado, a CLI/SDK passam esse provider para assertions
-`embedding_similarity`.
+When configured, CLI/SDK passes this provider to assertions `embedding_similarity`.
 
 ## Providers
 
@@ -510,9 +505,9 @@ Quando configurado, a CLI/SDK passam esse provider para assertions
 - `llamacpp`
 - `fake`
 
-## Variáveis De Ambiente
+## Environment Variables
 
-Configurações usam o prefixo `CRUCIBLE_`:
+Settings use the `CRUCIBLE_` prefix:
 
 ```bash
 CRUCIBLE_OPENAI_API_KEY=...
@@ -529,13 +524,13 @@ CRUCIBLE_CACHE_DIR=.crucible/cache
 CRUCIBLE_PLUGIN_MODULES=my_project.crucible_plugin
 ```
 
-## Estimativa De Custo
+## Cost Estimate
 
-O tracking de custo depende de:
+Cost tracking depends on:
 
 - `cost_per_million_input_tokens_usd`
 - `cost_per_million_cached_input_tokens_usd`
 - `cost_per_million_output_tokens_usd`
 
-Providers locais têm custo zero por padrão. Providers cloud também ficam com custo
-zero até você declarar preços no config.
+Local providers have zero cost by default. Cloud providers also stay at zero cost until you declare
+prices in config.

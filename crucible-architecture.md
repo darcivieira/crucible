@@ -1,112 +1,121 @@
 # Crucible — Prompt Optimization Framework
 
-> Framework agnóstico de domínio para otimização iterativa de prompts em LLMs/SLMs, dirigida por reasoning models e validada empiricamente contra gabaritos versionados.
+> Domain agnostic framework for iterative optimization of prompts in LLMs/SLMs, driven by reasoning
+  models and empirically validated against versioned benchmarks.
 
-**Versão:** 1.0 — Documento de Arquitetura
-**Autor:** Darci
-**Status:** Especificação inicial / MVP design
+**Version:** 1.0 — Architecture Document
+**Author:** Darci
+**Status:** Initial specification / MVP design
 
 ---
 
-## Sumário
+## Contents
 
-1. [Visão e Posicionamento](#1-visão-e-posicionamento)
-2. [Conceitos Centrais](#2-conceitos-centrais)
-3. [O Loop de Otimização](#3-o-loop-de-otimização)
-4. [Sistema de Scoring](#4-sistema-de-scoring)
-5. [Arquitetura (Clean Architecture + DDD)](#5-arquitetura-clean-architecture--ddd)
-6. [Modelos de Domínio (Pydantic v2)](#6-modelos-de-domínio-pydantic-v2)
+1. [Vision and Positioning](#1-vision-and-positioning)
+2. [Central Concepts](#2-central-concepts)
+3. [The Optimization Loop](#3-the-optimization-loop)
+4. [Scoring System](#4-scoring-system)
+5. [Architecture (Clean Architecture + DDD)](#5-architecture-clean-architecture--ddd)
+6. [Domain Models (Pydantic v2)](#6-domain-models-pydantic-v2)
 7. [Refinement Engine](#7-refinement-engine)
-8. [Decisões Técnicas](#8-decisões-técnicas)
-9. [UX e Interfaces](#9-ux-e-interfaces)
-10. [Estrutura de Projeto](#10-estrutura-de-projeto)
+8. [Technical Decisions](#8-technical-decisions)
+9. [UX and Interfaces](#9-ux-and-interfaces)
+10. [Project Structure](#10-project-structure)
 11. [Roadmap MVP](#11-roadmap-mvp)
-12. [Riscos e Mitigações](#12-riscos-e-mitigações)
-13. [Posicionamento Competitivo](#13-posicionamento-competitivo)
+12. [Risks and Mitigations](#12-risks-and-mitigations)
+13. [Competitive Positioning](#13-competitive-positioning)
 
 ---
 
-## 1. Visão e Posicionamento
+## 1. Vision and Positioning
 
-### 1.1 Tese
+### 1.1 Thesis
 
-Crucible é um **compilador iterativo de prompts**. Dado um prompt rascunho, um gabarito de entrada/saída esperada, um modelo-alvo (LLM menor ou SLM) e um modelo de raciocínio, o framework executa um loop de execução → avaliação → diagnóstico → refinamento até atingir um threshold de qualidade ou exaurir budget.
+ Crucible is an **iterative prompt compiler**. Given a draft prompt, an expected input/output
+benchmark, a target model (smaller LLM or SLM) and a reasoning model, the framework executes an
+execution loop → evaluation → diagnosis → refinement until reaching a quality threshold or
+exhausting the budget.
 
-### 1.2 Job-to-be-done primário
+### 1.2 Primary Job-to-be-done
 
-**Prompt optimization dirigida por reasoning model contra gabarito empírico, agnóstica de domínio e provider.**
+**Reasoning-driven prompt optimization against an empirical benchmark, independent of domain and
+provider.**
 
-### 1.3 Diferenciação
+### 1.3 Differentiation
 
-- **Multi-provider real**: Ollama, llama.cpp, vLLM como cidadãos de primeira classe (não afterthought)
-- **Separação arquitetural entre Target Model e Reasoning Model**: dois papéis distintos, configuráveis independentemente
-- **Loop com memória entre iterações**: o refiner vê histórico completo de tentativas, não single-shot
-- **Score operacional + qualitativo no mesmo plano**: qualidade × custo × latência como trade-off explícito
-- **Gabarito como entidade versionada de primeira classe**: separação prompt/gabarito permite regressão trivial
+- **Real multi-provider support**: Ollama, llama.cpp, vLLM as first-class citizens (not
+  afterthought)
+- **Architecture separation between Target Model and reasoning model**: two distinct roles,
+  independently configurable
+- **Loop with memory between iterations**: Refiner sees complete history of attempts, not
+  single-shot
+- **Operational + qualitative scores together**: quality × cost × latency as explicit trade-off
+- **Benchmark as first class versioned entity**: Prompt/benchmark separation allows trivial
+  regression
 
-### 1.4 O que NÃO é
+### 1.4 What IS NOT
 
-- Não é observability/tracing platform (Langfuse, Phoenix)
-- Não é prompt management UI (Promptlayer, Humanloop)
-- Não é fine-tuning framework
-- Não é agentic orchestration (Langgraph, AgentForge)
-- Não é serving infrastructure
-
----
-
-## 2. Conceitos Centrais
-
-| Conceito | Definição |
-|----------|-----------|
-| **Prompt** | Template versionado com placeholders e metadata. Identificado por hash de conteúdo. |
-| **Gabarito** | Coleção versionada de TestCases (input → expected_output + assertion). |
-| **TestCase** | Tripla (input, expected_output, assertion) + peso opcional + tags. |
-| **TargetModel** | Modelo a ser otimizado (LLM menor ou SLM). Roda muitas vezes. |
-| **ReasoningModel** | Modelo crítico/refator. Roda poucas vezes mas é caro. |
-| **OptimizationRun** | Aggregate root. Encapsula todo o loop de uma otimização. |
-| **Iteration** | Uma volta do loop: (prompt_version, execução, score, refinamento). |
-| **Assertion** | Regra de validação aplicada a um par (expected, actual). |
-| **Verdict** | Resultado de uma execução individual: pass/fail + score + métricas operacionais. |
-| **Budget** | Limites combinados: max_iterations, max_cost_usd, max_wallclock_seconds. |
+- Not observability/tracing platform (Langfuse, Phoenix)
+- Not prompt management UI (Promptlayer, Humanloop)
+- Not fine-tuning framework
+- Not agentic orchestration (Langgraph, AgentForge)
+- It's not serving infrastructure
 
 ---
 
-## 3. O Loop de Otimização
+## 2. Central Concepts
 
-### 3.1 Fluxo Conceitual
+| Concept | Definition |
+| ---------- | ----------- |
+| **Prompt** | Template versioned with placeholders and metadata. Identified by content hash. |
+| **Benchmark** | Versioned collection of TestCases (input → expected_output + assertion). |
+| **TestCase** | Triple (input, expected_output, assertion) + optional weight + tags. |
+| **TargetModel** | Model to be optimized (smaller LLM or SLM). Runs many times. |
+| **ReasoningModel** | Critic/refiner model. Runs fewer times but is expensive. |
+| **OptimizationRun** | Aggregate root. Encapsulates the entire loop of an optimization. |
+| **Iteration** | One pass through the loop: (prompt_version, run, score, refinement). |
+| **Assertion** | Validation rule applied to a pair (expected, current). |
+| **Verdict** | Result of an individual execution: pass/fail + score + operational metrics. |
+| **Budget** | Combined limits: max_iterations, max_cost_usd, max_wallclock_seconds. |
+
+---
+
+## 3. The Optimization Loop
+
+### 3.1 Conceptual Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  INPUT                                                      │
-│  - prompt_v0 (template inicial)                             │
-│  - gabarito (lista de TestCases)                            │
+│  - prompt_v0 (initial template)                             │
+│  - benchmark (list of TestCases)                            │
 │  - target_model (ex: gemma3:4b via Ollama)                  │
-│  - reasoning_model (ex: gpt-5 ou gemini-2.5-pro)            │
+│  - reasoning_model (ex: gpt-5 or gemini-2.5-pro)            │
 │  - config (threshold, budget, stopping criteria)            │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
               ┌────────────────────────┐
               │  EXECUTION             │
-              │  Para cada TestCase:   │
+              │  For each TestCase:    │
               │  - render(prompt, input)│
               │  - call(target_model)  │
-              │  - capturar output,    │
-              │    latência, tokens    │
-              │  (paralelo respeitando │
+              │  - capture output,     │
+              │    latency, tokens     │
+              │  (parallel, respecting │
               │   rate limits)         │
               └───────────┬────────────┘
                           │
                           ▼
               ┌────────────────────────┐
               │  SCORING               │
-              │  Para cada execução:   │
-              │  - aplicar assertion   │
-              │  - calcular score      │
-              │  Agregar:              │
-              │  - score global        │
-              │  - breakdown por tag   │
-              │  - custo total         │
+              │  For each execution:   │
+              │  - apply assertion     │
+              │  - calculate score     │
+              │  Aggregate:            │
+              │  - global score        │
+              │  - breakdown by tag    │
+              │  - total cost          │
               └───────────┬────────────┘
                           │
                           ▼
@@ -116,14 +125,14 @@ Crucible é um **compilador iterativo de prompts**. Dado um prompt rascunho, um 
                   │ - plateau     │
                   │ - budget out  │
                   └─┬───────────┬─┘
-                Sim │           │ Não
+                Yes │           │ No
                     ▼           ▼
               ┌────────┐  ┌──────────────────┐
               │ RETURN │  │  DIAGNOSIS       │
               │ best   │  │  Reasoning model │
-              │ prompt │  │  analisa erros:  │
-              └────────┘  │  - padrão        │
-                          │  - hipótese      │
+              │ prompt │  │  analyzes errors:│
+              └────────┘  │  - pattern       │
+                          │  - hypothesis    │
                           │  - root cause    │
                           └─────────┬────────┘
                                     │
@@ -131,16 +140,16 @@ Crucible é um **compilador iterativo de prompts**. Dado um prompt rascunho, um 
                           ┌──────────────────┐
                           │  REFINEMENT      │
                           │  Reasoning model │
-                          │  propõe:         │
+                          │  proposes:       │
                           │  - prompt_v(N+1) │
                           │  - rationale     │
-                          │  - mudanças diff │
+                          │  - diff changes  │
                           └─────────┬────────┘
                                     │
-                                    └──→ volta para EXECUTION
+                                    └──→ back to EXECUTION
 ```
 
-### 3.2 Critérios de Parada (combinados)
+### 3.2 Stop Criteria (combined)
 
 ```python
 def should_stop(run: OptimizationRun) -> StopReason | None:
@@ -157,9 +166,9 @@ def should_stop(run: OptimizationRun) -> StopReason | None:
     return None
 ```
 
-### 3.3 Seleção de Casos Divergentes
+### 3.3 Divergent Case Selection
 
-Mandar todos os erros ao reasoning model é desperdício. Estratégia híbrida:
+Sending all errors to the reasoning model is wasteful. Hybrid strategy:
 
 ```python
 def select_failures_for_refinement(
@@ -168,24 +177,24 @@ def select_failures_for_refinement(
     max_tokens: int = 8000,
 ) -> list[Verdict]:
     failures = [v for v in verdicts if not v.passed]
-    
-    # 1. Regressões (passavam antes, falham agora) — prioridade máxima
+
+    # 1. Regressions (previously passed, now fail) — highest priority
     regressions = [v for v in failures if v.is_regression]
-    
-    # 2. Top-K piores por score
+
+    # 2. Top-K worst cases by score
     worst = sorted(failures, key=lambda v: v.score)[:max_cases]
-    
-    # 3. Stratified sampling por tag/categoria
+
+    # 3. Stratified sampling by tag/category
     stratified = stratified_sample(failures, by="tags", k=max_cases)
-    
+
     # 4. Merge respeitando token budget
     selected = merge_dedupe([*regressions, *worst, *stratified])
     return truncate_by_tokens(selected, max_tokens)
 ```
 
-### 3.4 Memória Entre Iterações
+### 3.4 Memory Between Iterations
 
-O refiner recebe **histórico completo de tentativas** para evitar repetir sugestões falhas:
+The refiner receives **complete history of attempts** to avoid repeating faulty suggestions:
 
 ```python
 class IterationMemory(BaseModel):
@@ -194,20 +203,20 @@ class IterationMemory(BaseModel):
     score_before: float
     score_after: float
     delta: float
-    proposed_change: str  # rationale do refiner
-    diff_summary: str     # diff resumido do prompt
-    failure_pattern: str  # padrão de falha identificado
+    proposed_change: str  # refiner rationale
+    diff_summary: str     # summarized prompt diff
+    failure_pattern: str  # identified failure pattern
 ```
 
 ### 3.5 Best-Ever Tracking
 
-Sempre retornar o **melhor prompt já visto**, não o último:
+Always return **best prompt ever seen**, not the last:
 
 ```python
 class OptimizationRun:
     best_iteration: Iteration  # high-water mark
-    last_iteration: Iteration  # última executada
-    
+    last_iteration: Iteration  # last executed
+
     def update_best(self, candidate: Iteration) -> None:
         if candidate.score > self.best_iteration.score:
             self.best_iteration = candidate
@@ -215,53 +224,53 @@ class OptimizationRun:
 
 ---
 
-## 4. Sistema de Scoring
+## 4. Scoring System
 
-### 4.1 Hierarquia de Assertions (custo crescente)
+### 4.1 Assertions Hierarchy (growing cost)
 
-#### Tier 1 — Determinísticas
+#### Tier 1 — Deterministics
 
-| Assertion | Descrição | Uso típico |
-|-----------|-----------|------------|
-| `ExactMatch` | Igualdade literal (com opções de normalize) | IDs, valores formatados |
-| `NumericMatch` | Igualdade numérica com tolerância | Valores monetários, cálculos |
-| `Regex` | Pattern matching | Validação de formato |
-| `JsonEqual` | Deep equal de JSON | Outputs estruturados |
-| `JsonSchema` | Validação por schema Pydantic | Conformidade estrutural |
-| `Contains` | Substring/keyword presence | Verificações pontuais |
+| Assertion | Description | Typical use |
+| ----------- | ----------- | ------------ |
+| `ExactMatch` | literal equality (with normalize options) | IDs, formatted values |
+| `NumericMatch` | Numerical equality with tolerance | Monetary values, calculations |
+| `Regex` | Pattern matching | Format validation |
+| `JsonEqual` | JSON Deep equal | Structured outputs |
+| `JsonSchema` | Validation by schema Pydantic | Structural compliance |
+| `Contains` | Substring/keyword presence | One-off checks |
 
-#### Tier 2 — Estruturais
+#### Tier 2 — Structural
 
-| Assertion | Descrição |
-|-----------|-----------|
-| `FieldByField` | Compara campos de JSON com pesos individuais |
-| `PydanticModel` | Valida + compara via modelo Pydantic com tolerância por campo |
+| Assertion | Description |
+| ----------- | ----------- |
+| `FieldByField` | Compare JSON fields with individual weights |
+| `PydanticModel` | Valid + compare via Pydantic model with field tolerance |
 
-#### Tier 3 — Semânticas
+#### Tier 3 — Semantics
 
-| Assertion | Descrição | Modelo |
-|-----------|-----------|--------|
-| `EmbeddingSimilarity` | Cosine similarity sobre embeddings | text-embedding-3, BGE, etc. |
-| `BertScore` | F1 sobre tokens contextualizados | Modelo BERT |
+| Assertion | Description | Model |
+| ----------- | ----------- | -------- |
+| `EmbeddingSimilarity` | Cosine similarity on embeddings | text-embedding-3, BGE, etc. |
+| `BertScore` | F1 on contextualized tokens | BERT model |
 
 #### Tier 4 — LLM-as-Judge
 
-| Assertion | Descrição |
-|-----------|-----------|
-| `LLMJudge` | Reasoning model avalia expected vs actual com rubrica explícita |
-| `LLMJudgeWithRationale` | Idem + retorna justificativa estruturada |
+| Assertion | Description |
+| ----------- | ----------- |
+| `LLMJudge` | Reasoning model evaluates expected vs actual with an explicit rubric |
+| `LLMJudgeWithRationale` | Idem + returns structured justification |
 
-### 4.2 Declaração no Gabarito
+### 4.2 Declaration in Benchmark
 
-Assertions são **por TestCase**, não globais:
+Assertions are **by TestCase**, not global:
 
 ```python
-gabarito = Gabarito(
+benchmark = Benchmark(
     name="extracao-cnpj-v1",
     cases=[
         TestCase(
             id="case-001",
-            input="Extraia o CNPJ desta minuta: ABC SA, CNPJ 12.345.678/0001-90...",
+            input="Extract the CNPJ from this draft: ABC SA, CNPJ 12.345.678/0001-90...",
             expected_output="12.345.678/0001-90",
             assertion=ExactMatch(normalize=True),
             weight=1.0,
@@ -269,18 +278,18 @@ gabarito = Gabarito(
         ),
         TestCase(
             id="case-002",
-            input="Resuma este contrato em 3 frases: ...",
-            expected_output="O contrato estabelece os termos de prestação...",
+            input="Summarize this contract in 3 sentences: ...",
+            expected_output="The contract establishes the terms of service...",
             assertion=EmbeddingSimilarity(threshold=0.85),
             weight=2.0,
             tags=["summarization"],
         ),
         TestCase(
             id="case-003",
-            input="Avalie o risco desta operação: ...",
-            expected_output="Alto risco devido a...",
+            input="Evaluate the risk of this transaction: ...",
+            expected_output="High risk due to...",
             assertion=LLMJudge(
-                rubric="Avalie se a resposta identifica corretamente o nível de risco e justifica.",
+                rubric="Evaluate whether the response correctly identifies the risk level and justifies it.",
                 pass_threshold=0.7,
             ),
             weight=3.0,
@@ -290,14 +299,14 @@ gabarito = Gabarito(
 )
 ```
 
-### 4.3 Agregação
+### 4.3 Aggregation
 
 ```python
 def aggregate_score(verdicts: list[Verdict]) -> ScoreReport:
     total_weight = sum(v.test_case.weight for v in verdicts)
     weighted_sum = sum(v.score * v.test_case.weight for v in verdicts)
     global_score = (weighted_sum / total_weight) * 100
-    
+
     return ScoreReport(
         global_score=global_score,
         pass_rate=sum(1 for v in verdicts if v.passed) / len(verdicts),
@@ -315,31 +324,31 @@ def aggregate_score(verdicts: list[Verdict]) -> ScoreReport:
 
 ---
 
-## 5. Arquitetura (Clean Architecture + DDD)
+## 5. Architecture (Clean Architecture + DDD)
 
 ### 5.1 Bounded Contexts
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  AUTHORING CONTEXT                                          │
-│  Responsabilidade: definir prompts, gabaritos, configs      │
-│  Agregados: Prompt, Gabarito, OptimizationConfig            │
+│  Role: define prompts, benchmarks, configs                   │
+│  Aggregates:Prompt, Benchmark, OptimizationConfig            │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │  OPTIMIZATION CONTEXT                                       │
-│  Responsabilidade: executar o loop, refinar prompts         │
-│  Agregados: OptimizationRun, Iteration                      │
+│  Role: run the loop, refine prompts                         │
+│  Aggregates:OptimizationRun, Iteration                      │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │  ANALYSIS CONTEXT                                           │
-│  Responsabilidade: comparar runs, gerar relatórios          │
-│  Agregados: ComparisonReport, EvolutionReport               │
+│  Role: compare runs, generate reports                       │
+│  Aggregates:ComparisonReport, EvolutionReport               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 Camadas (Clean Architecture)
+### 5.2 Layers (Clean Architecture)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -359,7 +368,7 @@ def aggregate_score(verdicts: list[Verdict]) -> ScoreReport:
                        │
 ┌──────────────────────▼───────────────────────────────────┐
 │  DOMAIN (Pure)                                           │
-│  Entities: Prompt, TestCase, Gabarito, OptimizationRun   │
+│  Entities: Prompt, TestCase, Benchmark, OptimizationRun   │
 │  Value Objects: Score, Verdict, Budget, Assertion        │
 │  Domain Services: ScoringService, StoppingCriteria       │
 │  Domain Events: IterationCompleted, ThresholdReached     │
@@ -370,13 +379,14 @@ def aggregate_score(verdicts: list[Verdict]) -> ScoreReport:
 │  Providers: OllamaAdapter, OpenAIAdapter, AnthropicAd... │
 │  Storage: SqliteRepo, PostgresRepo                       │
 │  Embeddings: OpenAIEmbedder, LocalBgeEmbedder            │
-│  Telemetry: OTelExporter, LangfuseExporter (opcional)    │
+│  Telemetry: OTelExporter, LangfuseExporter (optional)    │
 └──────────────────────────────────────────────────────────┘
 ```
 
 ### 5.3 Dependency Rule
 
-Domínio não importa Application, Application não importa Infrastructure. Adapters implementam ports (Protocols) definidos no Domínio/Application.
+Domain does not import Application; Application does not import Infrastructure. Adapters implement
+ports (Protocols) defined in Domain/Application.
 
 ```python
 # domain/ports/model_provider.py
@@ -390,15 +400,15 @@ class ModelProvider(Protocol):
 # infrastructure/providers/ollama.py
 class OllamaAdapter:
     async def complete(self, prompt, params) -> CompletionResult:
-        # implementação concreta
+        # concrete implementation
         ...
 ```
 
 ---
 
-## 6. Modelos de Domínio (Pydantic v2)
+## 6. Domain Models (Pydantic v2)
 
-### 6.1 Núcleo
+### 6.1 Core
 
 ```python
 from pydantic import BaseModel, Field, ConfigDict
@@ -408,23 +418,23 @@ from hashlib import sha256
 
 class Prompt(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     template: str
     variables: list[str] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
-    
+
     @property
     def content_hash(self) -> str:
         return sha256(self.template.encode()).hexdigest()[:12]
-    
+
     def render(self, **kwargs) -> str:
         return self.template.format(**kwargs)
 
 
 class Assertion(BaseModel):
-    """Base para todas as assertions. Polimorfismo via type discriminator."""
+    """Base for all assertions. Polymorphism through a type discriminator."""
     type: str
-    
+
     async def evaluate(
         self, expected: str, actual: str, context: "AssertionContext"
     ) -> "AssertionResult":
@@ -433,7 +443,7 @@ class Assertion(BaseModel):
 
 class TestCase(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     id: str
     input: str
     expected_output: str
@@ -443,27 +453,27 @@ class TestCase(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-class Gabarito(BaseModel):
+class Benchmark(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     name: str
     version: str
     cases: list[TestCase]
     description: str | None = None
-    
+
     @property
     def content_hash(self) -> str:
         payload = self.model_dump_json()
         return sha256(payload.encode()).hexdigest()[:12]
-    
+
     def split(self, train: float = 0.7, val: float = 0.15) -> tuple[
-        "Gabarito", "Gabarito", "Gabarito"
+        "Benchmark", "Benchmark", "Benchmark"
     ]:
-        """Split estratificado em train/val/test."""
+        """Stratified train/val/test split."""
         ...
 ```
 
-### 6.2 Modelos e Execução
+### 6.2 Models and Execution
 
 ```python
 ProviderName = Literal["ollama", "openai", "anthropic", "google", "openrouter"]
@@ -483,7 +493,7 @@ class ModelSpec(BaseModel):
     model_id: str
     role: ModelRole
     params: ModelParams = Field(default_factory=ModelParams)
-    
+
     # Operational metadata
     cost_per_million_input_tokens_usd: float = 0.0
     cost_per_million_output_tokens_usd: float = 0.0
@@ -510,10 +520,10 @@ class Verdict(BaseModel):
     score: float  # 0.0 - 1.0
     passed: bool
     assertion_detail: dict[str, object] = Field(default_factory=dict)
-    is_regression: bool = False  # passou na iter anterior, falhou agora
+    is_regression: bool = False  # passed in the previous iteration, failed now
 ```
 
-### 6.3 Otimização
+### 6.3 Optimization
 
 ```python
 class OptimizationConfig(BaseModel):
@@ -524,8 +534,8 @@ class OptimizationConfig(BaseModel):
     plateau_window: int = 3
     plateau_min_delta: float = 0.5
     parallelism: int = 4
-    n_runs_per_case: int = 1  # para SLMs não-determinísticos
-    
+    n_runs_per_case: int = 1  # for non-deterministic SLMs
+
     target_model: ModelSpec
     reasoning_model: ModelSpec
     judge_model: ModelSpec | None = None  # default = reasoning_model
@@ -540,7 +550,7 @@ class Iteration(BaseModel):
     diagnosis: str | None = None
     timestamp_started: datetime
     timestamp_ended: datetime
-    
+
     @property
     def score(self) -> float:
         return self.score_report.global_score
@@ -549,26 +559,26 @@ class Iteration(BaseModel):
 class OptimizationRun(BaseModel):
     id: str
     config: OptimizationConfig
-    gabarito_hash: str
+    benchmark_hash: str
     initial_prompt_hash: str
     iterations: list[Iteration] = Field(default_factory=list)
     status: Literal["running", "completed", "failed", "aborted"] = "running"
     stop_reason: str | None = None
     started_at: datetime
     ended_at: datetime | None = None
-    
+
     @property
     def best_iteration(self) -> Iteration:
         return max(self.iterations, key=lambda it: it.score)
-    
+
     @property
     def total_cost_usd(self) -> float:
         return sum(
-            v.execution.cost_usd 
-            for it in self.iterations 
+            v.execution.cost_usd
+            for it in self.iterations
             for v in it.verdicts
         )
-    
+
     @property
     def score_history(self) -> list[float]:
         return [it.score for it in self.iterations]
@@ -578,15 +588,15 @@ class OptimizationRun(BaseModel):
 
 ## 7. Refinement Engine
 
-### 7.1 Separação Diagnose + Refactor
+### 7.1 Separation Diagnosis + Refactor
 
-Dois calls separados ao reasoning model para melhor qualidade:
+Two calls separated to the reasoning model for Best Quality:
 
 ```python
 class DiagnoseFailuresUseCase:
     def __init__(self, reasoning_provider: ModelProvider):
         self._provider = reasoning_provider
-    
+
     async def execute(
         self,
         prompt: Prompt,
@@ -604,7 +614,7 @@ class DiagnoseFailuresUseCase:
 class RefinePromptUseCase:
     def __init__(self, reasoning_provider: ModelProvider):
         self._provider = reasoning_provider
-    
+
     async def execute(
         self,
         current_prompt: Prompt,
@@ -619,109 +629,109 @@ class RefinePromptUseCase:
         return RefinementProposal.parse(response)
 ```
 
-### 7.2 Meta-prompt do Diagnose
+### 7.2 Diagnose Meta-Prompt
 
 ```
-Você é um especialista em prompt engineering avaliando falhas de um modelo {target_model_provider}/{target_model_id}.
+You are a prompt engineering expert evaluating failures of a {target_model_provider}/{target_model_id} model.
 
-CONTEXTO DO MODELO-ALVO:
+TARGET MODEL CONTEXT:
 - Provider: {provider}
 - Model ID: {model_id}
 - Context window: {context_window}
-- Capacidades conhecidas: {capabilities}
-- Limitações conhecidas: {known_limitations}
+- Known capabilities: {capabilities}
+- Known limitations: {known_limitations}
 
-PROMPT ATUAL (v{version}):
+CURRENT PROMPT (v{version}):
 ---
 {current_prompt}
 ---
 
-HISTÓRICO DE TENTATIVAS:
+ATTEMPT HISTORY:
 {history_summary}
 
-CASOS QUE FALHARAM NESTA ITERAÇÃO ({n_failures} casos):
+CASES THAT FAILED IN THIS ITERATION ({n_failures} cases):
 
 {for each failure:}
-─── Caso {id} (tags: {tags}, score: {score}) ───
+─── Case {id} (tags: {tags}, score: {score}) ───
 INPUT:
 {input}
 
-OUTPUT ESPERADO:
+EXPECTED OUTPUT:
 {expected}
 
-OUTPUT OBTIDO:
+ACTUAL OUTPUT:
 {actual}
 
-TIPO DE ASSERTION: {assertion_type}
-DETALHE DA FALHA: {assertion_detail}
+ASSERTION TYPE: {assertion_type}
+FAILURE DETAIL: {assertion_detail}
 
-SUA TAREFA:
-1. Identifique o PADRÃO DE FALHA dominante (não liste cada falha individualmente)
-2. Formule uma HIPÓTESE causal sobre o porquê o modelo falha
-3. Categorize a falha:
-   - INSTRUCTION_AMBIGUITY (prompt ambíguo)
-   - MISSING_CONSTRAINT (falta constraint explícito)
-   - WRONG_FORMAT (formato de saída mal especificado)
-   - MISSING_EXAMPLES (falta few-shot)
-   - WRONG_EXAMPLES (few-shots inadequados)
-   - MODEL_CAPABILITY (limitação do modelo, não do prompt)
-   - INPUT_COMPLEXITY (input excede capacidade)
-   - OUTPUT_LENGTH (limite de tokens)
+YOUR TASK:
+1. Identify the dominant FAILURE PATTERN (do not list each failure individually)
+2. Formulate a causal HYPOTHESIS about why the model fails
+3. Categorize the failure:
+   - INSTRUCTION_AMBIGUITY (ambiguous prompt)
+   - MISSING_CONSTRAINT (missing explicit constraint)
+   - WRONG_FORMAT (poorly specified output format)
+   - MISSING_EXAMPLES (missing few-shot examples)
+   - WRONG_EXAMPLES (inadequate few-shot examples)
+   - MODEL_CAPABILITY (limitation of the model rather than the prompt)
+   - INPUT_COMPLEXITY (input exceeds capacity)
+   - OUTPUT_LENGTH (token limit)
 
-Retorne JSON estritamente neste schema:
+Return JSON strictly following this schema:
 {
-  "pattern": "descrição do padrão",
-  "hypothesis": "hipótese causal",
+  "pattern": "pattern description",
+  "hypothesis": "causal hypothesis",
   "category": "INSTRUCTION_AMBIGUITY|MISSING_CONSTRAINT|...",
   "confidence": 0.0-1.0,
   "is_model_limitation": boolean
 }
 ```
 
-### 7.3 Meta-prompt do Refactor
+### 7.3 Refactor Meta-Prompt
 
 ```
-Você é um especialista em prompt engineering refatorando um prompt para o modelo {target_model_id}.
+You are a prompt engineering expert refactoring a prompt for the {target_model_id} model.
 
-PROMPT ATUAL:
+CURRENT PROMPT:
 ---
 {current_prompt}
 ---
 
-DIAGNÓSTICO:
-- Padrão de falha: {pattern}
-- Hipótese: {hypothesis}
-- Categoria: {category}
+DIAGNOSIS:
+- Failure pattern: {pattern}
+- Hypothesis: {hypothesis}
+- Category: {category}
 
-HISTÓRICO DE MUDANÇAS (NÃO REPITA):
+CHANGE HISTORY (DO NOT REPEAT):
 {for each past iteration:}
 - v{n}: {proposed_change} → score {before}→{after} ({delta:+.1f})
 
 CONSTRAINTS:
-- Mantenha as variáveis: {variables}
-- Não exceda {max_tokens_prompt} tokens no prompt
-- O modelo-alvo NÃO suporta: {unsupported_features}
+- Preserve the variables: {variables}
+- Do not exceed {max_tokens_prompt} tokens in the prompt
+- The target model DOES NOT support: {unsupported_features}
 
-SUA TAREFA:
-Proponha um NOVO prompt (v{next_version}) que aborde o padrão de falha identificado.
+YOUR TASK:
+Propose a NEW prompt (v{next_version}) that addresses the identified failure pattern.
 
-PRINCÍPIOS:
-- Mudança mínima necessária (não reescreva tudo)
-- Justifique cada alteração
-- Se já tentou abordagem similar e falhou, tente direção diferente
-- Para SLMs: prefira instruções mais explícitas e few-shots concretos
+PRINCIPLES:
+- Make the smallest necessary change (do not rewrite everything)
+- Justify every change
+- If you tried a similar approach and it failed, try a different direction
+- For SLMs: prefer more explicit instructions and concrete few-shot examples
 
-Retorne JSON:
+Return JSON:
 {
   "new_prompt": "...",
-  "diff_summary": "lista de mudanças concretas",
-  "rationale": "por que essa mudança aborda o diagnóstico",
-  "expected_improvement": "predição qualitativa do impacto",
+  "diff_summary": "list of concrete changes",
+  "rationale": "why this change addresses the diagnosis",
+  "expected_improvement": "qualitative prediction of the impact",
   "confidence": 0.0-1.0
 }
 ```
 
-### 7.4 Validação do Output do Refiner
+### 7.4 Refiner Output Validation
 
 ```python
 class RefinementProposal(BaseModel):
@@ -730,33 +740,33 @@ class RefinementProposal(BaseModel):
     rationale: str
     expected_improvement: str
     confidence: float = Field(ge=0.0, le=1.0)
-    
+
     def validate_against(self, current: Prompt) -> list[str]:
-        """Retorna lista de violações. Vazio = OK."""
+        """Return a list of violations. Empty = OK."""
         violations = []
         new = Prompt(template=self.new_prompt)
-        
-        # Variáveis preservadas?
+
+        # Variables preserved?
         if set(current.variables) != set(new.variables):
-            violations.append("variáveis alteradas")
-        
-        # Hash diferente? (não é idêntico ao atual)
+            violations.append("variables changed")
+
+        # Different hash? (differs from the current prompt)
         if new.content_hash == current.content_hash:
-            violations.append("prompt idêntico ao atual")
-        
+            violations.append("prompt is identical to the current one")
+
         return violations
 ```
 
 ---
 
-## 8. Decisões Técnicas
+## 8. Technical Decisions
 
-### 8.1 Concorrência
+### 8.1 Concurrency
 
-- **Asyncio nativo** em todo o pipeline
-- **Semáforo por provider** para rate limiting
-- **Ollama local**: fila sequencial (1 request/vez na GPU)
-- **Cloud APIs**: paralelismo agressivo respeitando RPM declarado por adapter
+- **Asyncio native** throughout the pipeline
+- **Semaphore per provider** for rate limiting
+- **Ollama local**: sequential queue (1 request/time in GPU)
+- **Cloud APIs**: aggressive parallelism respecting RPM declared by adapter
 
 ```python
 class ProviderRateLimit(BaseModel):
@@ -770,7 +780,7 @@ class RateLimitedProvider:
         self._provider = provider
         self._sem = asyncio.Semaphore(limits.max_concurrent)
         self._rpm_limiter = TokenBucket(limits.requests_per_minute) if limits.requests_per_minute else None
-    
+
     async def complete(self, *args, **kwargs):
         async with self._sem:
             if self._rpm_limiter:
@@ -778,9 +788,10 @@ class RateLimitedProvider:
             return await self._provider.complete(*args, **kwargs)
 ```
 
-### 8.2 Cache e Idempotência
+### 8.2 Cache and Idempotence
 
-Hash de `(prompt_hash, input, model_id, params_hash)` → cached `ExecutionResult`. Permite re-análise sem re-inferência.
+Hash of `(prompt_hash, input, model_id, params_hash)` → cached `ExecutionResult`. Allows re-analysis
+without re-inference.
 
 ```python
 class ExecutionCache(Protocol):
@@ -794,9 +805,9 @@ def execution_cache_key(
     return sha256(payload.encode()).hexdigest()
 ```
 
-### 8.3 Determinismo e Variância
+### 8.3 Determinism and Variance
 
-SLMs em `temperature=0` ainda têm variância (especialmente quantizados). Suporte a `n_runs_per_case`:
+SLMs in `temperature=0` still have variance (especially quantized). `n_runs_per_case` support:
 
 ```python
 async def execute_case_with_runs(
@@ -815,27 +826,27 @@ async def execute_case_with_runs(
 
 ### 8.4 Budget Enforcement
 
-Tracking de custo em USD em tempo real, hard stop quando exceder:
+Cost tracking in USD in real time, hard stop when exceeding:
 
 ```python
 class BudgetTracker:
     def __init__(self, max_cost_usd: float):
         self._max = max_cost_usd
         self._current = 0.0
-    
+
     def record(self, execution: ExecutionResult) -> None:
         self._current += execution.cost_usd
         if self._current >= self._max:
             raise BudgetExhausted(spent=self._current, limit=self._max)
 ```
 
-### 8.5 Persistência
+### 8.5 Persistence
 
-- **SQLite default** (zero-config, ideal para CLI/dev)
-- **Postgres opcional** (para uso colaborativo/CI)
-- **Parquet exports** para análise offline (pandas, polars)
+- **SQLite default** (zero-config, ideal for CLI/dev)
+- **Optional Postgres** (for collaborative use/CI)
+- **Parquet exports** for offline analysis (pandas, polars)
 
-Schema simplificado:
+Simplified scheme:
 
 ```sql
 CREATE TABLE prompts (
@@ -845,7 +856,7 @@ CREATE TABLE prompts (
     created_at TIMESTAMP
 );
 
-CREATE TABLE gabaritos (
+CREATE TABLE benchmarks (
     hash TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     version TEXT NOT NULL,
@@ -856,13 +867,13 @@ CREATE TABLE gabaritos (
 CREATE TABLE optimization_runs (
     id TEXT PRIMARY KEY,
     config JSON NOT NULL,
-    gabarito_hash TEXT NOT NULL,
+    benchmark_hash TEXT NOT NULL,
     initial_prompt_hash TEXT NOT NULL,
     status TEXT NOT NULL,
     stop_reason TEXT,
     started_at TIMESTAMP,
     ended_at TIMESTAMP,
-    FOREIGN KEY (gabarito_hash) REFERENCES gabaritos(hash),
+    FOREIGN KEY (benchmark_hash) REFERENCES benchmarks(hash),
     FOREIGN KEY (initial_prompt_hash) REFERENCES prompts(hash)
 );
 
@@ -900,7 +911,8 @@ CREATE INDEX idx_iterations_run ON iterations(run_id);
 
 ### 8.6 Observability
 
-OpenTelemetry nativo. Cada `OptimizationRun` é um trace, cada `Iteration` um span, cada execução um sub-span.
+OpenTelemetry native. Each `OptimizationRun` is a trace, each `Iteration` a span, each run a
+sub-span.
 
 ```python
 from opentelemetry import trace
@@ -910,7 +922,7 @@ async def run_optimization(config):
     with tracer.start_as_current_span("optimization.run") as root:
         root.set_attribute("target_model", config.target_model.model_id)
         root.set_attribute("threshold", config.threshold)
-        
+
         for iter_n in range(config.max_iterations):
             with tracer.start_as_current_span(f"iteration.{iter_n}") as it_span:
                 ...
@@ -918,30 +930,30 @@ async def run_optimization(config):
 
 ---
 
-## 9. UX e Interfaces
+## 9. UX and Interfaces
 
 ### 9.1 CLI
 
 ```bash
-# Inicializar projeto
+# Initialize project
 crucible init meu-projeto
 
-# Estrutura gerada:
+# Generated structure:
 # meu-projeto/
-#   gabarito.yaml
+#   benchmark.yaml
 #   prompt.txt
 #   config.yaml
 
 # Otimizar
 crucible optimize --config config.yaml
 
-# Output em tempo real (Rich/Textual):
-# 
+# Real-time output (Rich/Textual):
+#
 # Crucible v0.1.0 — Optimizing prompt for gemma3:4b
-# Gabarito: extracao-cnpj-v1 (47 cases)
+# Benchmark: extracao-cnpj-v1 (47 cases)
 # Reasoning model: gpt-5
 # Budget: $5.00 | Max iterations: 10 | Threshold: 95.0
-# 
+#
 # ┌─────────────────────────────────────────────────────────┐
 # │ Iter │ Score   │ Δ      │ Cost   │ Time  │ Status      │
 # ├──────┼─────────┼────────┼────────┼───────┼─────────────┤
@@ -951,45 +963,45 @@ crucible optimize --config config.yaml
 # │  v3  │  94.8%  │  +5.9  │ $0.47  │  38s  │ ❌ refining  │
 # │  v4  │  97.3%  │  +2.5  │ $0.62  │  35s  │ ✓ PASSED    │
 # └──────┴─────────┴────────┴────────┴───────┴─────────────┘
-# 
+#
 # ✓ Optimization complete
 # Best prompt: prompt_v4.txt (97.3%)
 # Total cost: $0.62 | Total time: 3m 42s
 # Report: ./runs/2026-05-22T14-30/report.html
 
-# Comparar iterações
+# Compare iterations
 crucible diff v0 v4 --run latest
 
-# Re-rodar sem refinamento (validação)
-crucible validate --prompt prompt_v4.txt --gabarito gabarito.yaml --model gemma3:4b
+# Rerun without refinement (validation)
+crucible validate --prompt prompt_v4.txt --benchmark benchmark.yaml --model gemma3:4b
 
 # Dashboard local
 crucible serve  # → http://localhost:7777
 
-# Exportar relatório
+# Export report
 crucible report --run <run_id> --format html|pdf|json
 ```
 
 ### 9.2 Python SDK
 
 ```python
-from crucible import Optimizer, Gabarito, ModelSpec, OptimizationConfig
+from crucible import Optimizer, Benchmark, ModelSpec, OptimizationConfig
 from crucible.assertions import ExactMatch, EmbeddingSimilarity, LLMJudge
 
-# Carrega gabarito
-gabarito = Gabarito.from_yaml("gabarito.yaml")
-# ou programaticamente:
-gabarito = Gabarito(
-    name="meu-gabarito",
+# Load benchmark
+benchmark = Benchmark.from_yaml("benchmark.yaml")
+# or programmatically:
+benchmark = Benchmark(
+    name="meu-benchmark",
     version="1.0",
     cases=[
-        TestCase(id="c1", input="...", expected_output="...", 
+        TestCase(id="c1", input="...", expected_output="...",
                  assertion=ExactMatch()),
         ...
     ],
 )
 
-# Configura otimização
+# Configure optimization
 config = OptimizationConfig(
     target_model=ModelSpec.ollama("gemma3:4b"),
     reasoning_model=ModelSpec.openai("gpt-5"),
@@ -1001,8 +1013,8 @@ config = OptimizationConfig(
 # Executa
 optimizer = Optimizer(config)
 result = await optimizer.run(
-    prompt="Extraia o CNPJ desta minuta: {input}",
-    gabarito=gabarito,
+    prompt="Extract the CNPJ from this draft: {input}",
+    benchmark=benchmark,
 )
 
 # Resultados
@@ -1011,17 +1023,17 @@ print(f"Best prompt: {result.best_prompt.template}")
 print(f"Iterations: {len(result.iterations)}")
 print(f"Total cost: ${result.total_cost_usd:.2f}")
 
-# Acesso ao histórico
+# Access history
 for iter in result.iterations:
     print(f"v{iter.version}: {iter.score:.1f}% — {iter.refinement_rationale}")
 ```
 
-### 9.3 Formato de Configuração (YAML)
+### 9.3 Configuration Format (YAML)
 
 ```yaml
 # config.yaml
 name: extracao-cnpj
-description: Otimização do prompt de extração de CNPJ para Gemma 3 4B
+description: CNPJ extraction prompt optimization for Gemma 3 4B
 
 target_model:
   provider: ollama
@@ -1047,43 +1059,43 @@ optimization:
   parallelism: 4
   n_runs_per_case: 1
 
-gabarito:
-  path: gabarito.yaml
+benchmark:
+  path: benchmark.yaml
 
 prompt:
   path: prompt.txt
 ```
 
-### 9.4 Formato de Gabarito (YAML)
+### 9.4 Benchmark format (YAML)
 
 ```yaml
-# gabarito.yaml
+# benchmark.yaml
 name: extracao-cnpj-v1
 version: "1.0"
-description: Casos de teste para extração de CNPJ de minutas
+description: Test cases for CNPJ extraction from drafts
 
 cases:
   - id: case-001
     input: |
-      Extraia o CNPJ desta minuta:
-      
-      ABC SERVIÇOS LTDA, CNPJ 12.345.678/0001-90, com sede em...
+      Extract the CNPJ from this draft:
+
+      ABC SERVICES LTD, CNPJ 12.345.678/0001-90, headquartered in...
     expected_output: "12.345.678/0001-90"
     assertion:
       type: exact_match
       normalize: true
     weight: 1.0
     tags: [extraction, cnpj, formatted]
-  
+
   - id: case-002
     input: |
-      Resuma o objeto deste contrato em até 3 frases:
-      
-      O presente instrumento tem por objeto a prestação de serviços...
+      Summarize the purpose of this contract in up to 3 sentences:
+
+      This agreement covers the provision of services...
     expected_output: |
-      O contrato estabelece a prestação de serviços de consultoria
-      pela ABC Ltda à XYZ SA, com vigência de 12 meses e valor mensal
-      de R$ 50.000,00.
+      The contract establishes the provision of consulting services
+      by ABC Ltd to XYZ SA for 12 months at a monthly rate
+      of BRL 50,000.00.
     assertion:
       type: embedding_similarity
       threshold: 0.85
@@ -1094,7 +1106,7 @@ cases:
 
 ---
 
-## 10. Estrutura de Projeto
+## 10. Project Structure
 
 ```
 crucible/
@@ -1106,12 +1118,12 @@ crucible/
 ├── src/crucible/
 │   ├── __init__.py
 │   │
-│   ├── domain/                       # Camada de domínio (pura)
+│   ├── domain/                       # Domain layer (pure)
 │   │   ├── __init__.py
 │   │   ├── entities/
 │   │   │   ├── prompt.py
 │   │   │   ├── test_case.py
-│   │   │   ├── gabarito.py
+│   │   │   ├── benchmark.py
 │   │   │   ├── iteration.py
 │   │   │   └── optimization_run.py
 │   │   ├── value_objects/
@@ -1192,7 +1204,7 @@ crucible/
 │   │   │   └── display/
 │   │   │       └── rich_renderer.py
 │   │   ├── sdk/
-│   │   │   ├── optimizer.py         # facade pública
+│   │   │   ├── optimizer.py         # public facade
 │   │   │   └── builders.py
 │   │   └── web/
 │   │       ├── api/                 # FastAPI
@@ -1229,206 +1241,210 @@ crucible/
 
 ## 11. Roadmap MVP
 
-### Fase 1 — Core Executor (1-2 semanas)
+### Phase 1 — Core Executor (1-2 weeks)
 
-**Objetivo:** rodar gabarito contra prompt+modelo e gerar score, sem loop.
+**Objective:** run benchmark against prompt+model and generate score without loop.
 
-- [ ] Domain models (Prompt, TestCase, Gabarito, Verdict)
+- [ ] Domain models (Prompt, TestCase, Benchmark, Verdict)
 - [ ] Assertions Tier 1 (ExactMatch, Regex, JsonEqual, NumericMatch)
-- [ ] Assertion Tier 2 (PydanticModel, FieldByField)
-- [ ] OllamaAdapter (primeiro provider)
-- [ ] ScoringService básico
-- [ ] CLI mínimo: `crucible validate --prompt --gabarito --model`
-- [ ] Persistência SQLite (verdict history)
+- [ ] assertion Tier 2 (PydanticModel, FieldByField)
+- [ ] OllamaAdapter (first provider)
+- [ ] Basic ScoringService
+- [ ] Minimum CLI: `crucible validate --prompt --benchmark --model`
+- [ ] SQLite Persistence (verdict history)
 
-**Saída:** ferramenta funcional para "rodar gabarito e ver score". Já tem valor isolado.
+**Output:** functional tool to "run a benchmark and see its score". It already has isolated value.
 
-### Fase 2 — Optimization Loop (1-2 semanas)
+### Phase 2 — Optimization Loop (1-2 weeks)
 
-**Objetivo:** loop completo end-to-end.
+**Objective:** complete loop end-to-end.
 
 - [ ] OpenAIAdapter / AnthropicAdapter (reasoning models)
-- [ ] DiagnoseFailuresUseCase + meta-prompt
+- [ ] Diagnosis FailuresUseCase + meta-prompt
 - [ ] RefinePromptUseCase + meta-prompt
-- [ ] OptimizationOrchestrator (o loop)
+- [ ] Optimization Orchestrator (the loop)
 - [ ] Stopping criteria (threshold, max_iter, budget, plateau)
 - [ ] BudgetTracker
-- [ ] FailureSelector (priorização)
-- [ ] IterationMemory + histórico no refiner
+- [ ] FailureSelector (priorisation)
+- [ ] IterationMemory + History in Refiner
 - [ ] CLI: `crucible optimize --config config.yaml`
 - [ ] Rich-based progress display
 
-**Saída:** produto utilizável end-to-end. Já é vendável para early adopters.
+**Output:** usable end-to-end product. It is already sellable for early adopters.
 
-### Fase 3 — Multi-Provider + Assertions Avançadas (2 semanas)
+### Phase 3 — Multi-Provider + Advanced Assertions (2 weeks)
 
-**Objetivo:** robustez e cobertura.
+**Objective:** robustness and coverage.
 
 - [ ] GoogleAdapter (Gemini)
-- [ ] OpenRouterAdapter (acesso a múltiplos modelos)
+- [ ] OpenRouterAdapter (access to multiple models)
 - [ ] llama.cpp / vLLM adapter
-- [ ] Assertion Tier 3 (EmbeddingSimilarity com BGE local + OpenAI)
-- [ ] Assertion Tier 4 (LLMJudge com mitigação de viés)
-- [ ] ExecutionCache (disk-based)
-- [ ] Rate limiting por provider
-- [ ] Paralelismo asyncio com semáforos
-- [ ] n_runs_per_case + agregação estatística
-- [ ] Train/val/test split do gabarito
+- [ ] Assertion Tier 3 (EmbeddingSimilarity with local BGE + OpenAI)
+- [ ] assertion Tier 4 (LLMJudge with bias mitigation)
+- [ ] Execution Cache (disk-based)
+- [ ] Rate limiting by provider
+- [ ] Asyncio parallelism with semaphores
+- [ ] n_runs_per_case + statistical aggregation
+- [ ] Benchmark Train/val/test split
 
-**Saída:** produto competitivo. Aqui já está acima do Promptfoo em otimização.
+**Output:** competitive product. Here is already above Promptfoo in optimization.
 
-### Fase 4 — Dashboard + Analytics (2-3 semanas)
+### Phase 4 — Dashboard + Analytics (2-3 weeks)
 
-**Objetivo:** experiência de análise profissional.
+**Objective:** professional analysis experience.
 
-- [ ] Web dashboard (FastAPI + HTMX ou Next.js)
-- [ ] Visualização de runs (timeline, score history)
-- [ ] Diff visual entre iterações
-- [ ] Comparação multi-run (modelo A vs B no mesmo gabarito)
-- [ ] Plot custo × qualidade × latência
+- [ ] Web dashboard (FastAPI + HTMX or Next.js)
+- [ ] Runs preview (timeline, score history)
+- [ ] Visual diff between iterations
+- [ ] Multi-run comparison (model A vs B on the same benchmark)
+- [ ] Plot cost × quality × latency
 - [ ] Export HTML/PDF report
 - [ ] OpenTelemetry integration
-- [ ] Langfuse integration (opcional)
+- [ ] Langfuse integration (optional)
 
-**Saída:** produto polido, pronto para uso em equipe / vendável.
+**Output:** polished product, ready for team use/sales.
 
-### Fase 5+ — Pós-MVP
+### Phase 5+ — Post-MVP
 
-- Plugin system para custom assertions
-- Importadores (Promptfoo, LangSmith, DSPy)
-- Multi-objective optimization (Pareto frontier qualidade × custo)
-- Active learning para expansão de gabarito
+- Plugin system for custom assertions
+- Importers (Promptfoo, LangSmith, DSPy)
+- Multi-objective optimization
+- Active learning for benchmark expansion
 - Distributed execution (Ray/Dask)
 - VSCode extension
-- API REST + multi-tenant
+- REST + multi-tenant API
 
 ---
 
-## 12. Riscos e Mitigações
+## 12. Risks and Mitigations
 
-### 12.1 Overfitting ao Gabarito
+### 12.1 Overfitting to Benchmark
 
-**Risco:** reasoning model otimiza prompt para passar nos testes específicos, perdendo generalização.
+**Risk:** reasoning model optimizes prompt to pass specific tests, losing generalization.
 
-**Mitigações:**
-- Split obrigatório train/validation/test (default 70/15/15)
-- Otimização usa apenas train; reporta score paralelo no val
-- Test set só é tocado na validação final
-- Warning explícito quando gap train↔val excede threshold (ex: 5pp)
-- Diversidade do gabarito como métrica de saúde
+**Mitigations:**
+- Mandatory train/validation/test split (default 70/15/15)
+- Optimization uses only train; reports parallel score in val
+- The test set is only run in the final validation
+- Explicit Warning when gap train↔val exceeds threshold (e.g. 5pp)
+- Benchmark Diversity as a Health Metric
 
-### 12.2 Custo Descontrolado
+### 12.2 Uncontrolled Cost
 
-**Risco:** loop de reasoning model queima fatura silenciosamente.
+**Risk:** reasoning model loop silently runs up the bill.
 
-**Mitigações:**
-- `max_cost_usd` é parâmetro obrigatório (não tem default unlimited)
-- Hard stop com exception clara ao exceder
-- Estimativa prévia: `crucible estimate-cost --config X` mostra custo esperado antes de rodar
-- Display em tempo real do custo acumulado
-- Cache de execução agressivo
+**Mitigations:**
+- `max_cost_usd` is mandatory parameter (no default unlimited)
+- Hard stop with clear exception when exceeding
+- Previous estimate: `crucible estimate-cost --config X` shows expected cost before running
+- Real-time display of the accumulated cost
+- Aggressive execution cache
 
-### 12.3 Prompt Drift (versões piores)
+### 12.3 Prompt Drift (worst versions)
 
-**Risco:** refiner gera v5 pior que v3.
+**Risk:** refiner generates v5 worse than v3.
 
-**Mitigações:**
+**Mitigations:**
 - Best-ever tracking (high-water mark)
-- Sempre retornar `best_iteration`, não `last_iteration`
-- Detecção de plateau interrompe loop improdutivo
-- Histórico de mudanças no contexto do refiner para evitar caminhos já testados
+- Always return `best_iteration`, not `last_iteration`
+- Plateau detection interrupts unproductive loop
+- History of changes in the context of the refiner to avoid paths already tested
 
-### 12.4 Viés do LLM-as-Judge
+### 12.4 LLM-as-Judge biases
 
-**Risco:** judge favorece outputs verbosos, formais, ou similares ao próprio estilo do modelo judge.
+**Risk:** judge favors verbose, formal, or similar outputs to the style of the judge model itself.
 
-**Mitigações:**
-- Position swap (rodar expected/actual em ambas as ordens)
-- Multiple judges (consenso entre N modelos)
-- Calibration set (casos com ground truth conhecido para auditar o judge)
-- Rubricas explícitas e estruturadas, não scoring livre
-- Preferir tiers determinísticos quando possível
+**Mitigations:**
+- Position swap (run expected/actual on both orders)
+- Multiple judges (consensus between N models)
+- Calibration set (cases with ground truth known to audit the judge)
+- Explicit, structured rubrics instead of unrestricted scoring
+- Prefer deterministic tiers when possible
 
-### 12.5 Não-determinismo de SLMs
+### 12.5 Non-determinism of SLMs
 
-**Risco:** mesmo prompt, mesmo input, scores variam entre runs.
+**Risk:** same prompt, same input, scores vary between runs.
 
-**Mitigações:**
-- `n_runs_per_case` configurável (default 1, recomendado 3-5 para SLMs)
-- Agregação por majority vote + std reportado
-- Warning quando std excede threshold ("scoring instável")
-- Seed quando suportado pelo provider
+**Mitigations:**
+- `n_runs_per_case` configurable (default 1, recommended 3-5 for SLMs)
+- Aggregation by majority vote + std reported
+- Warning when std exceeds threshold ("unstable scoring")
+- Seed when supported by provider
 
-### 12.6 Lock-in de Provider
+### 12.6 Lock-in of Provider
 
-**Risco:** dependência forte de um provider quebra portabilidade.
+**Risk:** strong dependence on a provider breaks portability.
 
-**Mitigações:**
-- Domain layer 100% agnóstico de provider
-- ModelProvider como Protocol/Port
-- Testes de contrato por adapter
-- Sempre suportar ao menos 1 alternativa local (Ollama) + 1 cloud
-
----
-
-## 13. Posicionamento Competitivo
-
-### 13.1 Mapa de Concorrentes
-
-| Produto | Foco | Lacuna que Crucible preenche |
-|---------|------|------------------------------|
-| **Promptfoo** | Regression testing, YAML-driven | Não otimiza prompts; foco em LLMs cloud |
-| **DeepEval** | Pytest-like eval, métricas | Sem loop de otimização; sem foco em SLM |
-| **DSPy** | Compilação programática de prompts | API acadêmica; sem UX pragmática; sem SLM-first |
-| **Braintrust / Langfuse** | Observability + eval | Não otimiza; foco em produção, não em iteração |
-| **OpenAI Evals** | Benchmark framework | Lock-in OpenAI; sem refinamento automático |
-| **Inspect AI** | Safety evals (AISI) | Foco em capability/safety, não em prompt opt |
-| **PromptAgent / OPRO** | Papers de otimização | Sem produto vendável; sem multi-provider |
-
-### 13.2 Tese de Posicionamento
-
-> **"O compilador de prompts para quem leva SLMs a sério."**
-
-Subposicionamentos derivados:
-- Para times de ML que rodam edge/on-prem: "otimize Gemma 3 4B sem chutar"
-- Para devs full-stack: "Promptfoo + DSPy num produto pragmático"
-- Para AI engineers em startups: "valide cost vs quality antes de migrar de GPT-4 para gpt-4o-mini"
-
-### 13.3 Use Cases-Âncora
-
-Casos de uso reais que validam o produto:
-
-1. **Migração cloud → edge**: empresa quer trocar GPT-4 por Gemma3 local; Crucible otimiza prompt e mostra trade-off
-2. **Multi-modelo selection**: dado um gabarito, qual modelo dá melhor custo/qualidade
-3. **Regression em produção**: prompt em prod precisa mudança; valida que não quebrou nada
-4. **Domain prompt engineering**: equipe jurídica/médica/financeira sem expertise em prompts itera empiricamente
+**Mitigations:**
+- Domain layer 100% provider-agnostic
+- ModelProvider as Protocol/Port
+- Adapter contract tests
+- Always support at least 1 local alternative (Ollama) + 1 cloud
 
 ---
 
-## Apêndice A — Glossário
+## 13. Competitive Positioning
 
-- **SLM** (Small Language Model): modelo ≤ ~10B parâmetros, geralmente rodável em hardware modesto
-- **LLM-as-Judge**: usar um LLM para avaliar a saída de outro LLM
-- **Few-shot**: prompt que inclui exemplos demonstrativos
-- **High-water mark**: melhor valor já observado em uma série
-- **Plateau detection**: identificar que métrica parou de melhorar
-- **Bounded Context** (DDD): fronteira semântica dentro da qual um modelo é consistente
-- **Port/Adapter**: padrão hexagonal — Port é interface no domínio, Adapter implementa na infra
+### 13.1 Competitor Map
 
-## Apêndice B — Referências
+| Product | Focus | Gap that Crucible fills |
+| --------- | ------ | ------------------------------ |
+| **Promptfoo** | Regression testing, YAML-driven | Do not optimize prompts; focus on LLMs cloud |
+| **DeepEval** | Pytest-like eval, metrics | No optimization loop; no SLM focus |
+| **DSPy** | Programmatic compilation of prompts | Academic API; no pragmatic UX; no SLM-first |
+| **Braintrust / Langfuse** | Observability + eval | Not optimize; focus on production, not iteration |
+| **OpenAI Evals** | Benchmark framework | Lock-in OpenAI; no automatic refinement |
+| **Inspect AI** | Safety evals (AISI) | Focus on capability/safety, not on prompt opt |
+| **PromptAgent / OPRO** | Optimization Papers | No saleable product; no multi-provider |
+
+### 13.2 Positioning Thesis
+
+> **"The prompt compiler for those who take SLMs seriously."**
+
+Derivative subpositions:
+- For ML teams that run edge/on-prem: "optimize Gemma 3 4B without guesswork"
+- For full-stack devs: "Promptfoo + DSPy in a pragmatic product"
+- For AI engineers in startups: "validate cost vs quality before migrating from GPT-4 to
+  gpt-4o-mini"
+
+### 13.3 Use Cases-Anchor
+
+Real use cases validating the product:
+
+1. **Migration cloud → edge**: company wants to exchange GPT-4 for local Gemma3; Crucible optimizes
+   prompt and shows trade-off
+2. **Multi-model selection**: given a benchmark, which model gives best cost/quality
+3. **Regression in production**: a production prompt needs to change; validate that nothing broke
+4. **Domain prompt engineering**: legal/medical/financial team without expertise iterates on prompts
+   empirically
+
+---
+
+## Appendix A — Glossary
+
+- **SLM** (Small Language Model): model ≤ ~10B parameters, usually runnable on modest hardware
+- **LLM-as-Judge**: use an LLM to evaluate the output of another LLM
+- **Few-shot**: prompt that includes demonstrative examples
+- **High-water mark**: best value ever observed in a series
+- **Plateau detection**: identify which metric has stopped improving
+- **Bounded Context** (DDD): semantic boundary within which a model is consistent
+- **Port/Adapter**: hexagonal pattern — Port is domain interface, the adapter implements it outside
+  the domain
+
+## Appendix B — References
 
 - DSPy (Khattab et al.) — programmatic prompt optimization
 - OPRO (Yang et al., DeepMind) — "Large Language Models as Optimizers"
-- PromptAgent (Wang et al.) — strategic planning para prompt opt
-- Promptfoo — referência de UX para eval
+- PromptAgent (Wang et al.) — strategic planning for prompt opt
+- Promptfoo — UX reference for eval
 - Anthropic Cookbook — prompt engineering best practices
-- "The Prompt Report" (Schulhoff et al., 2024) — taxonomia de técnicas
+- "The Prompt Report" (Schulhoff et al., 2024) — technical taxonomy
 
 ---
 
-**Próximos passos sugeridos após este documento:**
+**Next suggested steps after this document:**
 
-1. Decidir naming definitivo (Crucible, Anvil, Refinaria, etc.)
-2. Validar tese com 2-3 use cases reais (idealmente do seu portfolio: Sponsio, Huginn)
-3. Spike técnico: implementar Fase 1 em ~3 dias para validar viabilidade
-4. Decisão de modelo de distribuição: open source puro / open-core / proprietário
+1. Decide definitive naming (Crucible, Anvil, Refinery, etc.)
+2. Validate thesis with 2–3 real use cases (ideally from your portfolio: Sponsio, Huginn)
+3. Technical Spike: implement Phase 1 in ~3 days to validate feasibility
+4. Distribution model decision: pure open source / open-core / proprietary

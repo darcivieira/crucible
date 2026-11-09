@@ -3,9 +3,9 @@ import json
 import pytest
 
 from crucible import (
+    Benchmark,
     ComparisonTarget,
     Contains,
-    Gabarito,
     ModelParams,
     ModelSpec,
     OptimizationConfig,
@@ -81,14 +81,14 @@ def _config(max_iterations=3, threshold=100):
     )
 
 
-def _gabarito():
-    return Gabarito(
+def _benchmark():
+    return Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id="case-1",
-                input="Retorne ok",
+                input="Return ok",
                 expected_output="ok",
                 assertion=Contains(),
                 tags=["smoke"],
@@ -109,7 +109,7 @@ async def test_validate_executes_cases_and_scores():
     )
 
     iteration = await optimizer.validate(
-        Prompt(template="{input}", variables=["input"]), _gabarito()
+        Prompt(template="{input}", variables=["input"]), _benchmark()
     )
 
     assert iteration.score == 100
@@ -122,13 +122,13 @@ async def test_validate_turns_assertion_exception_into_failed_verdict():
         raise RuntimeError("judge returned invalid json")
 
     get_plugin_registry().register_assertion("raising-for-optimizer-test", raising_assertion)
-    gabarito = Gabarito(
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id="case-1",
-                input="Retorne ok",
+                input="Return ok",
                 expected_output="ok",
                 assertion=PluginAssertion(name="raising-for-optimizer-test"),
             )
@@ -143,7 +143,7 @@ async def test_validate_turns_assertion_exception_into_failed_verdict():
         cache=MemoryCache(),
     )
 
-    iteration = await optimizer.validate(Prompt(template="{input}", variables=["input"]), gabarito)
+    iteration = await optimizer.validate(Prompt(template="{input}", variables=["input"]), benchmark)
 
     assert iteration.score == 0
     assert iteration.verdicts[0].passed is False
@@ -159,7 +159,7 @@ async def test_validate_requires_target_and_reasoning_models():
     optimizer = Optimizer(config, store=MemoryStore(), cache=MemoryCache())
 
     with pytest.raises(ValueError, match="target_model is required for validate"):
-        await optimizer.validate(Prompt(template="{input}", variables=["input"]), _gabarito())
+        await optimizer.validate(Prompt(template="{input}", variables=["input"]), _benchmark())
 
 
 @pytest.mark.asyncio
@@ -170,7 +170,7 @@ async def test_optimize_requires_reasoning_model():
     optimizer = Optimizer(config, store=MemoryStore(), cache=MemoryCache())
 
     with pytest.raises(ValueError, match="reasoning_model is required for optimize"):
-        await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+        await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
 
 @pytest.mark.asyncio
@@ -195,7 +195,7 @@ async def test_optimize_returns_best_seen_prompt_after_refinement():
             )
         return json.dumps(
             {
-                "new_prompt": "Responda exatamente ok para: {input}",
+                "new_prompt": "Respond with exactly ok for: {input}",
                 "diff_summary": "adds exact output",
                 "rationale": "forces expected answer",
                 "expected_improvement": "higher precision",
@@ -212,7 +212,7 @@ async def test_optimize_returns_best_seen_prompt_after_refinement():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.stop_reason == "threshold_reached"
     assert run.best_iteration is not None
@@ -240,11 +240,11 @@ async def test_optimize_records_reasoning_session_and_injects_context():
                     "is_model_limitation": False,
                 }
             )
-        assert "HISTÓRICO DA SESSÃO DE REASONING" in prompt
+        assert "REASONING SESSION HISTORY" in prompt
         assert "missing exact instruction" in prompt
         return json.dumps(
             {
-                "new_prompt": "Responda exatamente ok para: {input}",
+                "new_prompt": "Respond with exactly ok for: {input}",
                 "diff_summary": "adds exact output",
                 "rationale": "forces expected answer",
                 "expected_improvement": "higher precision",
@@ -262,21 +262,21 @@ async def test_optimize_records_reasoning_session_and_injects_context():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.stop_reason == "threshold_reached"
     assert [turn.kind for turn in run.reasoning_session.turns] == [
         "diagnosis",
         "refinement",
     ]
-    assert run.reasoning_session.turns[0].parsed_payload["pattern"] == (
-        "missing exact instruction"
-    )
-    assert run.reasoning_session.turns[1].parsed_payload["new_prompt"].startswith(
-        "Responda exatamente ok"
+    assert run.reasoning_session.turns[0].parsed_payload["pattern"] == ("missing exact instruction")
+    assert (
+        run.reasoning_session.turns[1]
+        .parsed_payload["new_prompt"]
+        .startswith("Respond with exactly ok")
     )
     assert run.reasoning_session.turns[1].accepted is True
-    assert "HISTÓRICO DA SESSÃO DE REASONING" in reasoning_provider.prompts[0]
+    assert "REASONING SESSION HISTORY" in reasoning_provider.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -301,7 +301,7 @@ async def test_optimize_normalizes_reasoning_confidence_scales():
             )
         return json.dumps(
             {
-                "new_prompt": "Responda exatamente ok para: {input}",
+                "new_prompt": "Respond with exactly ok for: {input}",
                 "diff_summary": "adds exact output",
                 "rationale": "forces expected answer",
                 "expected_improvement": "higher precision",
@@ -318,14 +318,14 @@ async def test_optimize_normalizes_reasoning_confidence_scales():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.iterations[1].diagnosis is not None
     assert run.iterations[1].diagnosis.confidence == 0.5
     assert run.iterations[1].refinement_rationale == "forces expected answer"
 
 
-def test_task_contract_detects_literal_extraction_from_prompt_and_gabarito():
+def test_task_contract_detects_literal_extraction_from_prompt_and_benchmark():
     config = _config()
     config.target_model.output_format = ModelOutputFormat(
         type="json_schema",
@@ -335,22 +335,22 @@ def test_task_contract_detects_literal_extraction_from_prompt_and_gabarito():
             "properties": {
                 "classification": {
                     "type": "string",
-                    "enum": ["Nenhum", "Prazo"],
+                    "enum": ["None", "Deadline"],
                 },
                 "text_validation": {"type": "string"},
             },
         },
     )
-    gabarito = Gabarito(
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id="case-1",
-                input="Intime-se no prazo de 5 dias.",
+                input="Serve notice within 5 days.",
                 expected_output=(
-                    '{"classification": "Prazo", '
-                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                    '{"classification": "Deadline", '
+                    '"text_validation": "Serve notice within 5 days."}'
                 ),
                 assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
             )
@@ -359,28 +359,29 @@ def test_task_contract_detects_literal_extraction_from_prompt_and_gabarito():
 
     contract = build_task_contract(
         Prompt(
-            template="Classifique e extraia o trecho exato que justifica a classe.\n{input}",
+            template="Classify and extract the exact passage that justifies the class.\n{input}",
             variables=["input"],
         ),
-        gabarito,
+        benchmark,
         config,
     )
 
     assert "text_validation" in contract.literal_extraction_fields
     assert contract.output_contract["fields"] == ["classification", "text_validation"]
-    assert any("extração literal" in rule.text for rule in contract.invariants)
+    assert any("literal extraction" in rule.text for rule in contract.invariants)
 
 
 def test_contract_accepts_equivalent_no_invention_wording():
     config = _config()
-    gabarito = _gabarito()
+    benchmark = _benchmark()
     current = Prompt(
-        template="Não invente informação.\n{input}",
+        template="Do not invent information.\n{input}",
         variables=["input"],
     )
-    contract = build_task_contract(current, gabarito, config)
+    contract = build_task_contract(current, benchmark, config)
+    assert contract.negative_rules
     proposal = RefinementProposal(
-        new_prompt="Responda com base apenas nas informações presentes no input.\n{input}",
+        new_prompt="Respond based only on information present in the input.\n{input}",
         diff_summary="preserves no invention",
         rationale="keeps source-bound behavior",
         confidence=0.8,
@@ -388,7 +389,45 @@ def test_contract_accepts_equivalent_no_invention_wording():
 
     violations = validate_refinement_against_contract(proposal, current, contract)
 
-    assert "regra de não inventar informação foi removida" not in violations
+    assert "rule against inventing information was removed" not in violations
+
+
+def test_contract_rejects_removing_english_no_invention_rule():
+    current = Prompt(template="Do not invent information.\n{input}", variables=["input"])
+    contract = build_task_contract(current, _benchmark(), _config())
+    proposal = RefinementProposal(
+        new_prompt="Answer freely.\n{input}",
+        diff_summary="removes source restriction",
+        rationale="allows unsupported answers",
+        confidence=0.8,
+    )
+
+    violations = validate_refinement_against_contract(proposal, current, contract)
+
+    assert "rule against inventing information was removed" in violations
+
+
+@pytest.mark.parametrize(
+    ("new_prompt", "rejected"),
+    [
+        ("Classify only future events.\n{input}", False),
+        ("Classify every event.\n{input}", True),
+    ],
+)
+def test_contract_preserves_english_future_event_restriction(new_prompt, rejected):
+    current = Prompt(template="Classify future events only.\n{input}", variables=["input"])
+    contract = build_task_contract(current, _benchmark(), _config())
+    assert any("future events" in rule.text for rule in contract.invariants)
+    proposal = RefinementProposal(
+        new_prompt=new_prompt,
+        diff_summary="rewords the instruction",
+        rationale="clarifies classification",
+        confidence=0.8,
+    )
+
+    violations = validate_refinement_against_contract(proposal, current, contract)
+
+    assert ("future-events restriction was removed" in violations) is rejected
 
 
 @pytest.mark.asyncio
@@ -404,22 +443,22 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
             "properties": {
                 "classification": {
                     "type": "string",
-                    "enum": ["Nenhum", "Prazo"],
+                    "enum": ["None", "Deadline"],
                 },
                 "text_validation": {"type": "string"},
             },
         },
     )
-    gabarito = Gabarito(
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id="case-1",
-                input="Intime-se no prazo de 5 dias.",
+                input="Serve notice within 5 days.",
                 expected_output=(
-                    '{"classification": "Prazo", '
-                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                    '{"classification": "Deadline", '
+                    '"text_validation": "Serve notice within 5 days."}'
                 ),
                 assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
             )
@@ -429,7 +468,7 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
     def reasoning_response(prompt):
         calls["reasoning"] += 1
         if calls["reasoning"] == 1:
-            assert "CONTRATO DA TAREFA" in prompt
+            assert "TASK CONTRACT" in prompt
             return json.dumps(
                 {
                     "pattern": "text_validation is inferred",
@@ -439,14 +478,11 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
                     "is_model_limitation": False,
                 }
             )
-        assert (
-            "CASOS FALHOS QUE MOTIVAM O REFINO" in prompt
-            or "VIOLAÇÕES QUE DEVEM SER CORRIGIDAS" in prompt
-        )
+        assert "FAILING CASES MOTIVATING REFINEMENT" in prompt or "VIOLATIONS TO CORRECT" in prompt
         return json.dumps(
             {
                 "new_prompt": (
-                    "Classifique em classification e explique por que em text_validation. {input}"
+                    "Classify in classification and explain why in text_validation. {input}"
                 ),
                 "diff_summary": "turns evidence into rationale",
                 "rationale": "asks for explanation",
@@ -460,8 +496,8 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
 
     initial = Prompt(
         template=(
-            "Classifique a publicação e extraia o trecho exato em text_validation. "
-            "Não invente informação.\n{input}"
+            "Classify the notice and extract the exact passage in text_validation. "
+            "Do not invent information.\n{input}"
         ),
         variables=["input"],
     )
@@ -469,7 +505,7 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
         config,
         target_provider=FakeProvider(
             lambda prompt: (
-                '{"classification": "Prazo", "text_validation": "O texto contém prazo."}'
+                '{"classification": "Deadline", "text_validation": "The text contains a deadline."}'
             )
         ),
         reasoning_provider=FakeProvider(reasoning_response),
@@ -478,13 +514,13 @@ async def test_optimizer_rejects_refinement_that_turns_literal_extraction_into_i
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(initial, gabarito)
+    run = await optimizer.optimize(initial, benchmark)
 
     assert run.stop_reason == "reasoning_failed_to_refine"
     assert run.task_contract is not None
     assert run.iterations[0].refinement_rejected_reason is not None
     assert len(run.iterations[0].refinement_repair_attempts) == 2
-    assert "explicação/inferência" in run.iterations[0].refinement_rejected_reason
+    assert "explanation/inference" in run.iterations[0].refinement_rejected_reason
     assert len(run.iterations) == 1
 
 
@@ -499,21 +535,21 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
             "type": "object",
             "required": ["classification", "text_validation"],
             "properties": {
-                "classification": {"type": "string", "enum": ["Nenhum", "Prazo"]},
+                "classification": {"type": "string", "enum": ["None", "Deadline"]},
                 "text_validation": {"type": "string"},
             },
         },
     )
-    gabarito = Gabarito(
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id="case-1",
-                input="Intime-se no prazo de 5 dias.",
+                input="Serve notice within 5 days.",
                 expected_output=(
-                    '{"classification": "Prazo", '
-                    '"text_validation": "Intime-se no prazo de 5 dias."}'
+                    '{"classification": "Deadline", '
+                    '"text_validation": "Serve notice within 5 days."}'
                 ),
                 assertion=FieldByField(weights={"classification": 95, "text_validation": 5}),
             )
@@ -523,11 +559,10 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
     def target_response(prompt):
         calls["target"] += 1
         if calls["target"] == 1:
-            return '{"classification": "Prazo", "text_validation": "O texto contém prazo."}'
-        return (
-            '{"classification": "Prazo", '
-            '"text_validation": "Intime-se no prazo de 5 dias."}'
-        )
+            return (
+                '{"classification": "Deadline", "text_validation": "The text contains a deadline."}'
+            )
+        return '{"classification": "Deadline", "text_validation": "Serve notice within 5 days."}'
 
     def reasoning_response(prompt):
         calls["reasoning"] += 1
@@ -545,8 +580,7 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
             return json.dumps(
                 {
                     "new_prompt": (
-                        "Classifique em classification e explique por que em text_validation. "
-                        "{input}"
+                        "Classify in classification and explain why in text_validation. {input}"
                     ),
                     "diff_summary": "turns evidence into rationale",
                     "rationale": "asks for explanation",
@@ -554,17 +588,17 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
                     "confidence": 0.8,
                 }
             )
-        assert "VIOLAÇÕES QUE DEVEM SER CORRIGIDAS" in prompt
+        assert "VIOLATIONS TO CORRECT" in prompt
         return json.dumps(
             {
                 "new_prompt": (
-                    "Classifique em classification. Extraia de forma literal/fiel o trecho "
-                    "em text_validation. Use apenas informações presentes no input.\n{input}"
+                    "Classify in classification. Extract the literal/verbatim passage "
+                    "in text_validation. Use only information present in the input.\n{input}"
                 ),
                 "diff_summary": "repairs literal extraction and source constraint",
                 "rationale": "preserves the task contract",
                 "expected_improvement": "prevents inferred rationale",
-                "preserved_invariants": ["extração literal", "não inventar"],
+                "preserved_invariants": ["literal extraction", "do not invent"],
                 "changed_behavior": ["text_validation is exact evidence"],
                 "risk_of_regression": "low",
                 "confidence": 0.9,
@@ -573,8 +607,8 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
 
     initial = Prompt(
         template=(
-            "Classifique a publicação e extraia o trecho exato em text_validation. "
-            "Não invente informação.\n{input}"
+            "Classify the notice and extract the exact passage in text_validation. "
+            "Do not invent information.\n{input}"
         ),
         variables=["input"],
     )
@@ -587,13 +621,13 @@ async def test_optimizer_repairs_invalid_refinement_before_next_target_iteration
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(initial, gabarito)
+    run = await optimizer.optimize(initial, benchmark)
 
     assert run.stop_reason == "threshold_reached"
     assert calls["target"] == 2
     assert len(run.iterations) == 2
     assert len(run.iterations[0].refinement_repair_attempts) == 1
-    assert run.iterations[1].prompt.template.startswith("Classifique em classification")
+    assert run.iterations[1].prompt.template.startswith("Classify in classification")
     assert [turn.kind for turn in run.reasoning_session.turns] == [
         "diagnosis",
         "refinement",
@@ -617,7 +651,7 @@ async def test_optimize_keeps_current_prompt_when_reasoning_returns_invalid_json
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.stop_reason == "reasoning_failed_to_refine"
     assert len(run.iterations) == 1
@@ -649,7 +683,7 @@ async def test_optimize_stops_at_max_iterations():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.stop_reason == "max_iterations"
     assert len(run.iterations) == 1
@@ -670,7 +704,7 @@ async def test_validate_supports_multiple_runs_per_case():
     )
 
     iteration = await optimizer.validate(
-        Prompt(template="{input}", variables=["input"]), _gabarito()
+        Prompt(template="{input}", variables=["input"]), _benchmark()
     )
 
     assert iteration.score == 100
@@ -680,16 +714,16 @@ async def test_validate_supports_multiple_runs_per_case():
 
 
 @pytest.mark.asyncio
-async def test_optimize_with_gabarito_split_records_validation_scores():
+async def test_optimize_with_benchmark_split_records_validation_scores():
     config = _config(max_iterations=1, threshold=100)
-    config.use_gabarito_split = True
-    gabarito = Gabarito(
+    config.use_benchmark_split = True
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
             CrucibleTestCase(
                 id=f"case-{index}",
-                input="Retorne ok",
+                input="Return ok",
                 expected_output="ok",
                 assertion=Contains(),
             )
@@ -705,7 +739,7 @@ async def test_optimize_with_gabarito_split_records_validation_scores():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), gabarito)
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), benchmark)
 
     assert run.validation_scores["train"] == 100
     assert run.validation_scores["val"] == 100
@@ -728,7 +762,7 @@ async def test_optimizer_records_multi_objective_and_active_learning():
         cache=MemoryCache(),
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.iterations[0].objective_score is not None
     assert run.pareto_frontier_versions == [0]
@@ -747,7 +781,7 @@ async def test_optimizer_honors_cancellation_before_iteration():
         should_cancel=lambda: True,
     )
 
-    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _gabarito())
+    run = await optimizer.optimize(Prompt(template="{input}", variables=["input"]), _benchmark())
 
     assert run.status == "aborted"
     assert run.stop_reason == "cancelled"
@@ -778,12 +812,8 @@ async def test_compare_models_records_rankings_and_case_winners():
         ComparisonTarget(label="accurate", model=accurate),
     ]
     providers = {
-        "cheap": SequencedProvider(
-            [CompletionResult(text="wrong", tokens_in=100, tokens_out=100)]
-        ),
-        "accurate": SequencedProvider(
-            [CompletionResult(text="ok", tokens_in=100, tokens_out=100)]
-        ),
+        "cheap": SequencedProvider([CompletionResult(text="wrong", tokens_in=100, tokens_out=100)]),
+        "accurate": SequencedProvider([CompletionResult(text="ok", tokens_in=100, tokens_out=100)]),
     }
 
     class Factory:
@@ -803,7 +833,7 @@ async def test_compare_models_records_rankings_and_case_winners():
 
     run = await optimizer.compare_models(
         Prompt(template="{input}", variables=["input"]),
-        _gabarito(),
+        _benchmark(),
     )
 
     assert run.run_mode == "compare"
@@ -849,7 +879,9 @@ async def test_compare_models_saves_partial_run_when_target_fails():
     )
 
     with pytest.raises(RuntimeError) as exc:
-        await optimizer.compare_models(Prompt(template="{input}", variables=["input"]), _gabarito())
+        await optimizer.compare_models(
+            Prompt(template="{input}", variables=["input"]), _benchmark()
+        )
 
     assert "comparison target failed label=broken model=fake/broken" in str(exc.value)
     saved = store.runs[-1]
@@ -891,12 +923,12 @@ async def test_google_provider_cache_uses_cached_context_marker():
     )
 
     iteration = await optimizer.validate(
-        Prompt(template="Responda: {input}", variables=["input"]),
-        _gabarito(),
+        Prompt(template="Respond: {input}", variables=["input"]),
+        _benchmark(),
     )
 
     assert iteration.score == 100
-    assert provider.cached_content == [("Retorne ok", 3600)]
+    assert provider.cached_content == [("Return ok", 3600)]
     assert provider.calls[0][1] == "cachedContents/case-1"
-    assert "Retorne ok" not in provider.calls[0][0]
+    assert "Return ok" not in provider.calls[0][0]
     assert iteration.verdicts[0].execution.cached_tokens_in == 7

@@ -15,11 +15,11 @@ from crucible.modules.optimizer.domain.assertions import (
     Regex,
 )
 from crucible.modules.optimizer.domain.models import (
+    Benchmark,
     ComparisonSummary,
     ComparisonTarget,
     ContractRule,
     CostEstimate,
-    Gabarito,
     ModelOutputFormat,
     ModelParams,
     ModelSpec,
@@ -42,7 +42,7 @@ __all__ = [
     "ExactMatch",
     "FieldAssertionSpec",
     "FieldByField",
-    "Gabarito",
+    "Benchmark",
     "JsonEqual",
     "JsonSchema",
     "LLMJudge",

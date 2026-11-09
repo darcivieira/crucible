@@ -21,17 +21,17 @@ def test_init_creates_project_files(tmp_path):
 
     assert result.exit_code == 0
     assert (project / "prompt.txt").exists()
-    assert (project / "gabarito.yaml").exists()
+    assert (project / "benchmark.yaml").exists()
     assert (project / "config.yaml").exists()
 
 
 def test_validate_runs_with_fake_provider(tmp_path):
     runner = CliRunner()
     prompt = tmp_path / "prompt.txt"
-    gabarito = tmp_path / "gabarito.yaml"
+    benchmark = tmp_path / "benchmark.yaml"
     config = tmp_path / "config.yaml"
     prompt.write_text("{input}", encoding="utf-8")
-    gabarito.write_text(
+    benchmark.write_text(
         yaml.safe_dump(
             {
                 "name": "sample",
@@ -68,8 +68,8 @@ def test_validate_runs_with_fake_provider(tmp_path):
             "validate",
             "--prompt",
             str(prompt),
-            "--gabarito",
-            str(gabarito),
+            "--benchmark",
+            str(benchmark),
             "--config",
             str(config),
         ],
@@ -85,7 +85,7 @@ def test_compare_models_runs_with_fake_provider(tmp_path, monkeypatch):
     from crucible.core import settings as settings_module
 
     settings_module._settings = None
-    prompt, gabarito, config = _write_project_files(tmp_path)
+    prompt, benchmark, config = _write_project_files(tmp_path)
     loaded = OptimizationConfig.model_validate(yaml.safe_load(config.read_text(encoding="utf-8")))
     loaded.target_model = None
     loaded.reasoning_model = None
@@ -110,8 +110,8 @@ def test_compare_models_runs_with_fake_provider(tmp_path, monkeypatch):
             "compare-models",
             "--prompt",
             str(prompt),
-            "--gabarito",
-            str(gabarito),
+            "--benchmark",
+            str(benchmark),
             "--config",
             str(config),
         ],
@@ -147,7 +147,7 @@ def test_history_estimate_and_split_commands(tmp_path, monkeypatch):
 
     settings_module._settings = None
     run = _saved_run(tmp_path / "crucible.sqlite")
-    prompt, gabarito, config = _write_project_files(tmp_path)
+    prompt, benchmark, config = _write_project_files(tmp_path)
     runner = CliRunner()
 
     list_result = runner.invoke(app, ["list-runs"])
@@ -159,8 +159,8 @@ def test_history_estimate_and_split_commands(tmp_path, monkeypatch):
             "estimate-cost",
             "--prompt",
             str(prompt),
-            "--gabarito",
-            str(gabarito),
+            "--benchmark",
+            str(benchmark),
             "--config",
             str(config),
         ],
@@ -168,7 +168,7 @@ def test_history_estimate_and_split_commands(tmp_path, monkeypatch):
     split_dir = tmp_path / "splits"
     split_result = runner.invoke(
         app,
-        ["split-gabarito", "--gabarito", str(gabarito), "--output-dir", str(split_dir)],
+        ["split-benchmark", "--benchmark", str(benchmark), "--output-dir", str(split_dir)],
     )
 
     assert list_result.exit_code == 0
@@ -180,7 +180,7 @@ def test_history_estimate_and_split_commands(tmp_path, monkeypatch):
     assert estimate_result.exit_code == 0
     assert "estimated_total_cost_usd" in estimate_result.output
     assert split_result.exit_code == 0
-    assert (split_dir / "gabarito.train.yaml").exists()
+    assert (split_dir / "benchmark.train.yaml").exists()
 
 
 def test_export_and_import_commands(tmp_path, monkeypatch):
@@ -216,7 +216,7 @@ def test_export_and_import_commands(tmp_path, monkeypatch):
     import_result = runner.invoke(
         app,
         [
-            "import-gabarito",
+            "import-benchmark",
             "--source",
             "jsonl",
             "-i",
@@ -277,7 +277,7 @@ def _saved_run(root):
         target_model=ModelSpec(provider="fake", model_id="t", role="target"),
         reasoning_model=ModelSpec(provider="fake", model_id="r", role="reasoning"),
     )
-    run = OptimizationRun(config=config, gabarito_hash="g", initial_prompt_hash="p")
+    run = OptimizationRun(config=config, benchmark_hash="g", initial_prompt_hash="p")
     run.iterations.extend(
         [
             Iteration(
@@ -300,10 +300,10 @@ def _saved_run(root):
 
 def _write_project_files(root):
     prompt = root / "prompt.txt"
-    gabarito = root / "gabarito.yaml"
+    benchmark = root / "benchmark.yaml"
     config = root / "config.yaml"
     prompt.write_text("{input}", encoding="utf-8")
-    gabarito.write_text(
+    benchmark.write_text(
         yaml.safe_dump(
             {
                 "name": "sample",
@@ -343,4 +343,4 @@ def _write_project_files(root):
         ),
         encoding="utf-8",
     )
-    return prompt, gabarito, config
+    return prompt, benchmark, config

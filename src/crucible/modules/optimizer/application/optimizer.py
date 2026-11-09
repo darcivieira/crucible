@@ -34,13 +34,13 @@ from crucible.modules.optimizer.application.multi_objective import update_multi_
 from crucible.modules.optimizer.application.reports import write_report
 from crucible.modules.optimizer.domain.assertions import AssertionContext, AssertionResult
 from crucible.modules.optimizer.domain.models import (
+    Benchmark,
     ComparisonCaseWinner,
     ComparisonSummary,
     ComparisonWinner,
     CompletionResult,
     Diagnosis,
     ExecutionResult,
-    Gabarito,
     Iteration,
     IterationMemory,
     ModelSpec,
@@ -90,21 +90,15 @@ class Optimizer:
         self.execution_backend = execution_backend(
             config.execution_backend, config.distributed_workers
         )
-        self.target_provider = (
-            target_provider
-            or (
-                self.provider_factory.get(config.target_model)
-                if config.target_model is not None
-                else None
-            )
+        self.target_provider = target_provider or (
+            self.provider_factory.get(config.target_model)
+            if config.target_model is not None
+            else None
         )
-        self.reasoning_provider = (
-            reasoning_provider
-            or (
-                self.provider_factory.get(config.reasoning_model)
-                if config.reasoning_model is not None
-                else None
-            )
+        self.reasoning_provider = reasoning_provider or (
+            self.provider_factory.get(config.reasoning_model)
+            if config.reasoning_model is not None
+            else None
         )
         self.judge_specs = _judge_specs(config)
         self.judge_providers = judge_providers or [
@@ -126,26 +120,26 @@ class Optimizer:
     def provider_cache_warnings(self) -> list[str]:
         return list(self._provider_cache_warnings)
 
-    async def validate(self, prompt: Prompt, gabarito: Gabarito) -> Iteration:
+    async def validate(self, prompt: Prompt, benchmark: Benchmark) -> Iteration:
         self._require_validate_dependencies("validate")
         return await self._run_iteration(
             version=0,
             prompt=prompt,
-            gabarito=gabarito,
+            benchmark=benchmark,
             previous_verdicts=None,
             diagnosis=None,
             proposal=None,
         )
 
-    async def compare_models(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
+    async def compare_models(self, prompt: Prompt, benchmark: Benchmark) -> OptimizationRun:
         if not self.config.comparison_models:
             raise ValueError("comparison_models must contain at least one model")
         started_at = datetime.now(UTC)
         run = OptimizationRun(
             run_mode="compare",
             config=self.config,
-            task_contract=build_task_contract(prompt, gabarito, self.config),
-            gabarito_hash=gabarito.content_hash,
+            task_contract=build_task_contract(prompt, benchmark, self.config),
+            benchmark_hash=benchmark.content_hash,
             initial_prompt_hash=prompt.content_hash,
             started_at=started_at,
         )
@@ -159,7 +153,7 @@ class Optimizer:
                     iteration = await self._run_iteration(
                         version=index,
                         prompt=prompt,
-                        gabarito=gabarito,
+                        benchmark=benchmark,
                         previous_verdicts=None,
                         diagnosis=None,
                         proposal=None,
@@ -193,9 +187,9 @@ class Optimizer:
         await self.store.save_run(run)
         return run
 
-    def estimate_cost(self, prompt: Prompt, gabarito: Gabarito):
+    def estimate_cost(self, prompt: Prompt, benchmark: Benchmark):
         self._require_validate_dependencies("estimate-cost")
-        return estimate_cost(prompt, gabarito, self.config)
+        return estimate_cost(prompt, benchmark, self.config)
 
     async def load_run(self, run_id: str) -> OptimizationRun:
         return await self.store.load_run(run_id)
@@ -207,10 +201,10 @@ class Optimizer:
         run = await self.load_run(run_id)
         return write_report(run, reports_dir or settings.reports_dir, format)
 
-    async def optimize(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
+    async def optimize(self, prompt: Prompt, benchmark: Benchmark) -> OptimizationRun:
         self._require_validate_dependencies("optimize")
-        if self.config.use_gabarito_split:
-            train_set, val_set, test_set = gabarito.split(
+        if self.config.use_benchmark_split:
+            train_set, val_set, test_set = benchmark.split(
                 train=self.config.train_ratio,
                 val=self.config.val_ratio,
             )
@@ -227,14 +221,14 @@ class Optimizer:
                 }
                 await self.store.save_run(run)
             return run
-        return await self._optimize_loop(prompt, gabarito)
+        return await self._optimize_loop(prompt, benchmark)
 
-    async def _optimize_loop(self, prompt: Prompt, gabarito: Gabarito) -> OptimizationRun:
-        task_contract = build_task_contract(prompt, gabarito, self.config)
+    async def _optimize_loop(self, prompt: Prompt, benchmark: Benchmark) -> OptimizationRun:
+        task_contract = build_task_contract(prompt, benchmark, self.config)
         run = OptimizationRun(
             config=self.config,
             task_contract=task_contract,
-            gabarito_hash=gabarito.content_hash,
+            benchmark_hash=benchmark.content_hash,
             initial_prompt_hash=prompt.content_hash,
         )
         current_prompt = prompt
@@ -257,7 +251,7 @@ class Optimizer:
                 iteration = await self._run_iteration(
                     version=len(run.iterations),
                     prompt=current_prompt,
-                    gabarito=gabarito,
+                    benchmark=benchmark,
                     previous_verdicts=previous_verdicts,
                     diagnosis=pending_diagnosis,
                     proposal=pending_proposal,
@@ -350,7 +344,7 @@ class Optimizer:
         self,
         version: int,
         prompt: Prompt,
-        gabarito: Gabarito,
+        benchmark: Benchmark,
         previous_verdicts: list[Verdict] | None,
         diagnosis: Diagnosis | None,
         proposal: RefinementProposal | None,
@@ -358,7 +352,7 @@ class Optimizer:
         started = datetime.now(UTC)
         previous_by_case = {v.test_case.id: v for v in previous_verdicts or []}
         semaphore = asyncio.Semaphore(self.config.parallelism)
-        await self._prepare_provider_contexts(gabarito)
+        await self._prepare_provider_contexts(benchmark)
 
         async def run_case(test_case: TestCase) -> Verdict:
             async with semaphore:
@@ -373,7 +367,7 @@ class Optimizer:
             return job
 
         jobs: list[Callable[[], Awaitable[Verdict]]] = []
-        for test_case in gabarito.cases:
+        for test_case in benchmark.cases:
             jobs.append(job_for(test_case))
         verdicts = await self.execution_backend.gather(jobs)
         return Iteration(
@@ -547,7 +541,7 @@ class Optimizer:
         self._provider_context_cache[cache_key] = cache_id
         return cache_id
 
-    async def _prepare_provider_contexts(self, gabarito: Gabarito) -> None:
+    async def _prepare_provider_contexts(self, benchmark: Benchmark) -> None:
         cache_config = self.config.provider_cache
         if (
             not cache_config.enabled
@@ -556,7 +550,7 @@ class Optimizer:
             or self.config.target_model.provider != "google"
         ):
             return
-        for test_case in gabarito.cases:
+        for test_case in benchmark.cases:
             await self._provider_cache_id(test_case)
 
     async def _diagnose(
@@ -589,9 +583,11 @@ class Optimizer:
             errors.append(str(exc))
             payload = {}
         diagnosis = Diagnosis(
-            pattern=str(payload.get("pattern", "Falhas sem padrão estruturado.")),
+            pattern=str(payload.get("pattern", "Failures without a structured pattern.")),
             hypothesis=str(
-                payload.get("hypothesis", "O prompt atual não especifica a resposta esperada.")
+                payload.get(
+                    "hypothesis", "The current prompt does not specify the expected response."
+                )
             ),
             category=str(payload.get("category", "INSTRUCTION_AMBIGUITY")),
             confidence=_confidence(payload.get("confidence", 0.5)),
@@ -787,9 +783,7 @@ class Optimizer:
         if not self.judge_specs:
             self.judge_specs = [reasoning_model]
         if not self.judge_providers:
-            self.judge_providers = [
-                self.provider_factory.get(spec) for spec in self.judge_specs
-            ]
+            self.judge_providers = [self.provider_factory.get(spec) for spec in self.judge_specs]
         if self.judge_provider is None and self.judge_providers:
             self.judge_provider = self.judge_providers[0]
 
@@ -858,9 +852,7 @@ def _proposal_from_payload(payload: dict[str, Any], prompt: Prompt) -> Refinemen
             )
         ),
         expected_improvement=str(payload.get("expected_improvement", "")),
-        preserved_invariants=[
-            str(item) for item in payload.get("preserved_invariants", []) or []
-        ],
+        preserved_invariants=[str(item) for item in payload.get("preserved_invariants", []) or []],
         changed_behavior=[str(item) for item in payload.get("changed_behavior", []) or []],
         risk_of_regression=str(payload.get("risk_of_regression", "unknown")),
         confidence=_confidence(payload.get("confidence", 0.5)),
@@ -1177,7 +1169,7 @@ def _reasoning_session_context(
     max_chars: int = 12_000,
 ) -> str:
     if not session.turns:
-        return "Sem interações anteriores nesta sessão de otimização."
+        return "No previous interactions in this optimization session."
     items = [_reasoning_turn_summary(turn) for turn in session.turns[-max_turns:]]
     context = "\n".join(items)
     if len(context) <= max_chars:
@@ -1287,7 +1279,7 @@ def _diagnosis_prompt(
     target = f"{target_model.provider}/{target_model.model_id}"
     cases = "\n\n".join(
         (
-            f"Caso {verdict.test_case.id} tags={verdict.test_case.tags} score={verdict.score}\n"
+            f"Case {verdict.test_case.id} tags={verdict.test_case.tags} score={verdict.score}\n"
             f"INPUT:\n{verdict.test_case.input}\n"
             f"EXPECTED:\n{verdict.test_case.expected_output}\n"
             f"ACTUAL:\n{verdict.execution.actual_output}\n"
@@ -1297,16 +1289,17 @@ def _diagnosis_prompt(
         for verdict in failures
     )
     return (
-        f"Você é especialista em prompt engineering para {target}.\n\n"
-        f"PROMPT ATUAL:\n---\n{prompt.template}\n---\n\n"
-        f"CONTRATO DA TAREFA (fonte da verdade para preservar comportamento):\n"
+        f"You are a prompt engineering expert for {target}.\n\n"
+        f"CURRENT PROMPT:\n---\n{prompt.template}\n---\n\n"
+        f"TASK CONTRACT (source of truth for preserving behavior):\n"
         f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
-        f"HISTÓRICO:\n{[item.model_dump() for item in history]}\n\n"
-        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
-        f"CASOS FALHOS:\n{cases}\n\n"
-        "Classifique a falha como erro de classificação, extração literal, formato, "
-        "ambiguidade do prompt, limitação do modelo ou possível inconsistência do gabarito. "
-        "Retorne JSON estrito com pattern, hypothesis, category, confidence e is_model_limitation."
+        f"HISTORY:\n{[item.model_dump() for item in history]}\n\n"
+        f"REASONING SESSION HISTORY:\n{reasoning_context}\n\n"
+        f"FAILING CASES:\n{cases}\n\n"
+        "Classify the failure as a classification, literal extraction, or format error, "
+        "prompt ambiguity, a model limitation, or a possible benchmark inconsistency. "
+        "Return strict JSON with pattern, hypothesis, category, confidence, "
+        "and is_model_limitation."
     )
 
 
@@ -1321,7 +1314,7 @@ def _refinement_prompt(
 ) -> str:
     cases = "\n\n".join(
         (
-            f"Caso {verdict.test_case.id} score={verdict.score}\n"
+            f"Case {verdict.test_case.id} score={verdict.score}\n"
             f"EXPECTED:\n{verdict.test_case.expected_output}\n"
             f"ACTUAL:\n{verdict.execution.actual_output}\n"
             f"ASSERTION:\n{verdict.test_case.assertion.type}\n"
@@ -1330,23 +1323,23 @@ def _refinement_prompt(
         for verdict in failures
     )
     return (
-        f"Você está refatorando um prompt para {target_model.provider}/{target_model.model_id}.\n\n"
-        f"PROMPT ATUAL:\n---\n{prompt.template}\n---\n\n"
-        f"CONTRATO DA TAREFA (não viole):\n"
+        f"You are refactoring a prompt for {target_model.provider}/{target_model.model_id}.\n\n"
+        f"CURRENT PROMPT:\n---\n{prompt.template}\n---\n\n"
+        f"TASK CONTRACT (do not violate):\n"
         f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
-        f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
-        f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
-        f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
-        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
-        f"CASOS FALHOS QUE MOTIVAM O REFINO:\n{cases}\n\n"
-        "Regras obrigatórias: preserve a intenção do prompt inicial; trate o gabarito "
-        "como fonte da verdade quando o prompt for omisso; não transforme extração "
-        "literal em explicação, resumo ou inferência; não otimize um caso removendo "
-        "comportamentos que já passavam.\n\n"
-        "Retorne JSON estrito com new_prompt, diff_summary, rationale, "
+        f"REQUIRED VARIABLES: {prompt.variables}\n"
+        f"DIAGNOSIS: {diagnosis.model_dump()}\n"
+        f"HISTORY: {[item.model_dump() for item in history]}\n\n"
+        f"REASONING SESSION HISTORY:\n{reasoning_context}\n\n"
+        f"FAILING CASES MOTIVATING REFINEMENT:\n{cases}\n\n"
+        "Mandatory rules: preserve the intent of the initial prompt; treat the benchmark "
+        "as the source of truth when the prompt is silent; do not turn literal "
+        "extraction into explanation, summary, or inference; do not optimize a case by removing "
+        "behaviors that already passed.\n\n"
+        "Return strict JSON with new_prompt, diff_summary, rationale, "
         "expected_improvement, preserved_invariants, changed_behavior, "
-        "risk_of_regression e confidence. "
-        "Mantenha todas as variáveis obrigatórias no novo prompt."
+        "risk_of_regression, and confidence. "
+        "Keep all required variables in the new prompt."
     )
 
 
@@ -1365,7 +1358,7 @@ def _repair_refinement_prompt(
 ) -> str:
     cases = "\n\n".join(
         (
-            f"Caso {verdict.test_case.id} score={verdict.score}\n"
+            f"Case {verdict.test_case.id} score={verdict.score}\n"
             f"EXPECTED:\n{verdict.test_case.expected_output}\n"
             f"ACTUAL:\n{verdict.execution.actual_output}\n"
             f"ASSERTION:\n{verdict.test_case.assertion.type}\n"
@@ -1379,27 +1372,27 @@ def _repair_refinement_prompt(
         else {"new_prompt": prompt.template}
     )
     return (
-        f"Você está na tentativa {attempt}/{max_attempts} de reparar um refino de prompt "
-        f"para {target_model.provider}/{target_model.model_id}.\n\n"
-        "A proposta anterior foi rejeitada pelo contrato da tarefa. Gere uma nova proposta; "
-        "não repita o mesmo erro e não rode uma explicação fora do JSON.\n\n"
-        f"PROMPT ATUAL QUE DEVE SER REFINADO:\n---\n{prompt.template}\n---\n\n"
-        f"PROPOSTA REJEITADA:\n{json.dumps(rejected, ensure_ascii=False, indent=2)}\n\n"
-        f"VIOLAÇÕES QUE DEVEM SER CORRIGIDAS:\n"
+        f"You are on attempt {attempt}/{max_attempts} to repair a prompt refinement "
+        f"for {target_model.provider}/{target_model.model_id}.\n\n"
+        "The previous proposal was rejected by the task contract. Generate a new proposal; "
+        "do not repeat the same error or include an explanation outside the JSON.\n\n"
+        f"CURRENT PROMPT TO REFINE:\n---\n{prompt.template}\n---\n\n"
+        f"REJECTED PROPOSAL:\n{json.dumps(rejected, ensure_ascii=False, indent=2)}\n\n"
+        f"VIOLATIONS TO CORRECT:\n"
         f"{json.dumps(violations, ensure_ascii=False, indent=2)}\n\n"
-        f"CONTRATO DA TAREFA (fonte da verdade, obrigatório preservar):\n"
+        f"TASK CONTRACT (source of truth, must be preserved):\n"
         f"{json.dumps(task_contract.model_dump(mode='json'), ensure_ascii=False, indent=2)}\n\n"
-        f"VARIÁVEIS OBRIGATÓRIAS: {prompt.variables}\n"
-        f"DIAGNÓSTICO: {diagnosis.model_dump()}\n"
-        f"HISTÓRICO: {[item.model_dump() for item in history]}\n\n"
-        f"HISTÓRICO DA SESSÃO DE REASONING:\n{reasoning_context}\n\n"
-        f"CASOS FALHOS QUE MOTIVAM O REPARO:\n{cases}\n\n"
-        "Corrija especificamente cada violação. Preserve campos de saída, variáveis, "
-        "restrições negativas, regras de extração literal e a fonte da verdade do gabarito. "
-        "Se text_validation representa trecho textual, mantenha extração fiel do input; "
-        "não substitua por justificativa inferida. Se houver regra de não inventar, use "
-        "apenas informações presentes no input.\n\n"
-        "Retorne JSON estrito com new_prompt, diff_summary, rationale, "
+        f"REQUIRED VARIABLES: {prompt.variables}\n"
+        f"DIAGNOSIS: {diagnosis.model_dump()}\n"
+        f"HISTORY: {[item.model_dump() for item in history]}\n\n"
+        f"REASONING SESSION HISTORY:\n{reasoning_context}\n\n"
+        f"FAILING CASES MOTIVATING REPAIR:\n{cases}\n\n"
+        "Correct each violation specifically. Preserve output fields, variables, "
+        "negative constraints, literal extraction rules, and the benchmark as the source of truth. "
+        "If text_validation represents a passage, keep verbatim extraction from the input; "
+        "do not replace it with an inferred rationale. If there is a rule against inventing, use "
+        "only information present in the input.\n\n"
+        "Return strict JSON with new_prompt, diff_summary, rationale, "
         "expected_improvement, preserved_invariants, changed_behavior, "
-        "risk_of_regression e confidence."
+        "risk_of_regression, and confidence."
     )

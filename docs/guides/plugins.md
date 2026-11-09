@@ -1,15 +1,15 @@
-# Guia: Plugins
+# Guide: Plugins
 
-Use plugins quando você precisa validar ou importar algo específico do seu domínio
-sem alterar o core do Crucible.
+Use plugins when you need to validate or import something specific from your domain without changing
+the Crucible core.
 
-## Quando Usar
+## When to Use
 
-- uma assertion depende de uma regra interna;
-- o gabarito vem de um formato proprietário;
-- você quer experimentar comportamento sem manter um fork.
+- an assertion depends on an internal rule;
+- the benchmark comes from a proprietary format;
+- You want to experiment with behavior without maintaining a fork.
 
-## Assertion Customizada
+## Custom assertion
 
 ```python
 from crucible.modules.optimizer.domain.assertions import AssertionResult
@@ -23,7 +23,7 @@ def register(registry):
     registry.register_assertion("has_priority", has_priority)
 ```
 
-Uso:
+Usage:
 
 ```yaml
 assertion:
@@ -33,14 +33,15 @@ assertion:
     priority: high
 ```
 
-## Carregar Plugin
+## Load Plugin
 
 ```bash
 CRUCIBLE_PLUGIN_MODULES=my_project.crucible_plugin \
-  uv run crucible validate --prompt prompt.txt --gabarito gabarito.yaml --config config.yaml
+  uv run crucible validate --prompt prompt.txt --benchmark benchmark.yaml --config config.yaml
 ```
 
-## O Que Esperar
+## What to Expect
 
-Erros do plugin sobem para o comando. Escreva testes com `FakeProvider` e fixtures
-pequenas antes de usar em runs caras.
+Plugin errors propagate to the command. Write tests with `FakeProvider` and small fixtures before
+using in
+expensive runs.

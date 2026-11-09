@@ -21,7 +21,7 @@ fi
 
 uv run crucible validate \
   --prompt "$PROJECT_DIR/prompt.txt" \
-  --gabarito "$PROJECT_DIR/gabarito.yaml" \
+  --benchmark "$PROJECT_DIR/benchmark.yaml" \
   --config "$CONFIG_PATH"
 
 uv run crucible estimate-cost --config "$CONFIG_PATH"

@@ -1,19 +1,18 @@
-# Guia: Comparacao De Modelos
+# Guide: Model Comparison
 
-Use este fluxo quando a duvida principal nao e o prompt, mas o modelo alvo. Ele
-responde: "qual modelo entrega melhor resultado neste gabarito, considerando custo e
-latencia?"
+Use this flow when the main doubt is not the prompt, but the target model. It responds: "Which model
+delivers best result in this benchmark, considering cost and latency?"
 
-## Quando Usar
+## When to Use
 
-- antes de rodar uma otimizacao longa;
-- quando voce esta escolhendo entre SLM, LLM pequeno e modelo cloud;
-- quando um modelo barato parece bom, mas voce precisa medir regressao por caso;
-- quando custo de input grande pesa na decisao.
+- before running a long optimization;
+- when you are choosing between SLM, small LLM and cloud model;
+- when a cheap model looks good, but you need to measure regressions per case;
+- when large input cost weighs on decision.
 
-## Configurar
+## Configure
 
-Declare os candidatos em `comparison_models`:
+State the candidates in `comparison_models`:
 
 ```yaml
 comparison_models:
@@ -41,37 +40,35 @@ comparison_models:
       cost_per_million_output_tokens_usd: 2.00
 ```
 
-No modo de comparacao, `target_model` e `reasoning_model` nao sao obrigatorios. O
-Crucible usa cada item de `comparison_models` como target temporario da iteracao.
-Eles continuam obrigatorios apenas quando o mesmo arquivo tambem for usado para
-`validate`, `optimize` ou `estimate-cost`.
+In comparison mode, `target_model` and `reasoning_model` are not mandatory. Crucible uses each
+`comparison_models` item as a temporary iteration target. They remain mandatory only when the same
+file is also used for `validate`, `optimize` or `estimate-cost`.
 
-## Executar
+## Run
 
 ```bash
 uv run crucible compare-models \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-Tambem funciona pelo dashboard escolhendo `Compare` em `Nova run`, ou pela API com
-`mode: compare`.
+It also works by the dashboard choosing `Compare` in `New run`, or by the API with `mode: compare`.
 
-## O Que Esperar
+## What to Expect
 
-A run gerada tem `run_mode: compare` e uma iteracao por modelo. O relatorio mostra:
+The run generated has `run_mode: compare` and a iteration per model. The report shows:
 
-- score e pass rate;
-- custo total;
-- p95 de latencia;
-- tokens cacheados;
-- melhor modelo por score;
-- modelo mais barato;
-- melhor custo-beneficio;
-- vencedores por caso.
+- score and pass rate;
+- total cost;
+- p95 latency;
+- cached tokens;
+- best model per score;
+- cheaper model;
+- better value for money;
+- winners per case.
 
-O vencedor por custo-beneficio usa pesos normalizados:
+The winner by value for money uses standard weights:
 
 ```yaml
 comparison_value_quality_weight: 0.8
@@ -79,12 +76,12 @@ comparison_value_cost_weight: 0.2
 comparison_value_latency_weight: 0.0
 ```
 
-Se a qualidade for inegociavel, mantenha peso alto em qualidade. Se o objetivo for
-triagem de alto volume, aumente o peso de custo.
+If the quality is non-negotiable, keep high weight in quality. If the goal is high-volume screening,
+increase the cost weight.
 
-## Proximo Passo
+## Next Step
 
-Depois de escolher o target, promova esse modelo para `target_model` e rode:
+After choosing the target, promote this model to `target_model` and run:
 
 ```bash
 uv run crucible validate --config config.yaml

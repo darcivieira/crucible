@@ -20,3 +20,12 @@ versioning once the first public release is tagged.
 - Optional live provider smoke test harness.
 - VSCode extension scaffold.
 - MIT license for open source distribution.
+
+### Changed
+
+- Standardized code, comments, internal prompts, interface text, examples, and all
+  documentation on English.
+- Renamed the public benchmark model, SDK arguments, CLI commands/options, API
+  fields, configuration keys, and example files to English names. This is a
+  breaking change: existing integrations, configuration files, and saved run
+  payloads must be updated before use. No automatic data migration is included.

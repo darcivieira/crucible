@@ -1,35 +1,35 @@
-from crucible import Contains, Gabarito, Prompt
+from crucible import Benchmark, Contains, Prompt
 from crucible import TestCase as CrucibleTestCase
 from crucible.modules.optimizer.domain.models import ExecutionResult, ModelOutputFormat, Verdict
 from crucible.modules.optimizer.domain.scoring import aggregate_score
 
 
 def test_prompt_hash_and_render():
-    prompt = Prompt(template="Responda: {input}", variables=["input"])
+    prompt = Prompt(template="Respond: {input}", variables=["input"])
 
-    assert prompt.render(input_text="ok") == "Responda: ok"
+    assert prompt.render(input_text="ok") == "Respond: ok"
     assert len(prompt.content_hash) == 12
 
 
 def test_prompt_render_preserves_literal_json_braces():
     prompt = Prompt(
-        template='Retorne {"classification": "Nenhum", "text_validation": ""}\nInput: {input}',
+        template='Return {"classification": "None", "text_validation": ""}\nInput: {input}',
         variables=["input"],
     )
 
-    assert prompt.render(input_text="texto") == (
-        'Retorne {"classification": "Nenhum", "text_validation": ""}\nInput: texto'
+    assert prompt.render(input_text="text") == (
+        'Return {"classification": "None", "text_validation": ""}\nInput: text'
     )
 
 
 def test_prompt_render_treats_input_as_literal_replacement():
     prompt = Prompt(template="Input: {input}", variables=["input"])
 
-    assert prompt.render(input_text=r"texto com \98 e \1") == r"Input: texto com \98 e \1"
+    assert prompt.render(input_text=r"text with \98 and \1") == r"Input: text with \98 and \1"
 
 
-def test_gabarito_requires_cases():
-    gabarito = Gabarito(
+def test_benchmark_requires_cases():
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
@@ -42,11 +42,11 @@ def test_gabarito_requires_cases():
         ],
     )
 
-    assert len(gabarito.content_hash) == 12
+    assert len(benchmark.content_hash) == 12
 
 
-def test_gabarito_split_creates_three_sets():
-    gabarito = Gabarito(
+def test_benchmark_split_creates_three_sets():
+    benchmark = Benchmark(
         name="sample",
         version="v1",
         cases=[
@@ -60,7 +60,7 @@ def test_gabarito_split_creates_three_sets():
         ],
     )
 
-    train, val, test = gabarito.split()
+    train, val, test = benchmark.split()
 
     assert train.version == "v1-train"
     assert val.version == "v1-val"

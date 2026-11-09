@@ -2,22 +2,21 @@
 
 ## Supported Versions
 
-Enquanto o projeto estiver em `0.x`, apenas a versão mais recente recebe correções de
-segurança.
+While the project is in `0.x`, only the latest version receives security fixes.
 
 ## Reporting A Vulnerability
 
-Não abra issue pública para vulnerabilidades.
+Don't open public issue for vulnerabilities.
 
-Envie um relatório privado aos mantenedores do repositório com:
+Send a private report to repository maintainers with:
 
-- descrição do problema;
-- impacto esperado;
-- passos de reprodução;
-- versões afetadas;
-- mitigação sugerida, se houver.
+- description of the problem;
+- expected impact;
+- reproduction steps;
+- affected versions;
+- suggested mitigation, if any.
 
 ## Sensitive Data
 
-Reports do Crucible podem conter prompts, inputs, expected outputs, outputs de modelo
-e racionales de judges. Não anexe reports com dados sensíveis em issues públicas.
+Crucible Reports can contain prompts, inputs, expected outputs, model outputs and judges rationales.
+Do not attach reports with sensitive data in public issues.

@@ -1,11 +1,11 @@
 name: model-comparison
 version: v1
-description: Compara targets para extracao estruturada com pesos por campo.
+description: Compares targets for structured extraction with per-field weights.
 cases:
-  - id: prazo-001
-    input: "Fica a parte autora intimada para manifestar-se no prazo de 5 dias."
+  - id: deadline-001
+    input: "The claimant is hereby notified to respond within 5 days."
     expected_output: |
-      {"classification": "Prazo", "text_validation": "prazo de 5 dias"}
+      {"classification": "Deadline", "text_validation": "within 5 days"}
     assertion:
       type: field_by_field
       weights:
@@ -16,11 +16,11 @@ cases:
           type: exact
         text_validation:
           type: contains
-    tags: [prazo]
-  - id: intimacao-001
-    input: "Intime-se o requerido acerca da decisao de fls. 23."
+    tags: [deadline]
+  - id: notice-001
+    input: "Notify the defendant of the decision on page 23."
     expected_output: |
-      {"classification": "Intimacao", "text_validation": "Intime-se o requerido"}
+      {"classification": "Notice", "text_validation": "Notify the defendant"}
     assertion:
       type: field_by_field
       weights:
@@ -31,11 +31,11 @@ cases:
           type: exact
         text_validation:
           type: contains
-    tags: [intimacao]
-  - id: outro-001
-    input: "Certifico que os autos foram conclusos para despacho."
+    tags: [notice]
+  - id: other-001
+    input: "I certify that the case file was submitted for a ruling."
     expected_output: |
-      {"classification": "Outro", "text_validation": ""}
+      {"classification": "Other", "text_validation": ""}
     assertion:
       type: field_by_field
       weights:
@@ -46,4 +46,4 @@ cases:
           type: exact
         text_validation:
           type: normalized_exact
-    tags: [outro]
+    tags: [other]

@@ -1,15 +1,16 @@
-# Guia: Uso Em CI
+# Guide: Use in CI
 
-Use Crucible no CI para impedir regressões de prompt antes de publicar mudanças.
+Use Crucible in CI to prevent prompt regressions before publishing changes.
 
-## Estratégia Recomendada
+## Recommended Strategy
 
-No CI, prefira `validate`, não `optimize`.
+In CI, prefer `validate`, not `optimize`.
 
-`validate` é previsível: mede o prompt atual e falha rápido se provider/gabarito
-quebrar. `optimize` pode consumir mais tempo e custo.
+`validate` is predictable: it measures the current prompt and fails quickly if the
+provider/benchmark breaks.
+`optimize` can consume more time and cost.
 
-## Exemplo GitHub Actions
+## Example GitHub Actions
 
 ```yaml
 name: Prompt Regression
@@ -30,14 +31,14 @@ jobs:
       - run: |
           uv run crucible validate \
             --prompt prompt.txt \
-            --gabarito gabarito.yaml \
+            --benchmark benchmark.yaml \
             --config config.yaml
       - run: uv run crucible report --run latest --format html
 ```
 
-## O Que Guardar Como Artefato
+## What to Save as Artifact
 
 - `.crucible/reports/*.html`
-- exports CSV/Parquet se houver análise posterior
+- CSV/Parquet exports if there is further analysis
 
-Não publique reports se o gabarito tiver dados sensíveis.
+Do not publish reports if the benchmark has sensitive data.

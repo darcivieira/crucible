@@ -1,30 +1,30 @@
-# Conceitos
+# Concepts
 
 ## Prompt
 
-Template versionado que será renderizado para cada caso do gabarito.
+Versioned template that will be rendered for each benchmark case.
 
 ```text
-Responda de forma objetiva.
+Respond concisely.
 
 Input:
 {input}
 ```
 
-O placeholder mais comum é `{input}`. O hash do conteúdo identifica versões em
-relatórios, cache e diffs.
+The most common placeholder is `{input}`. The content hash identifies versions in reports, cache,
+and diffs.
 
-## Gabarito
+## Benchmark
 
-Coleção versionada de casos de teste. Ele representa o contrato empírico que o
-prompt precisa cumprir.
+Versioned collection of test cases. It represents the empirical contract that the prompt needs to
+comply with.
 
 ```yaml
 name: sample
 version: v1
 cases:
   - id: case-001
-    input: "Diga apenas: ok"
+    input: "Say only: ok"
     expected_output: "ok"
     assertion:
       type: contains
@@ -32,36 +32,37 @@ cases:
 
 ## TestCase
 
-Um caso individual com:
+An individual case with:
 
-- `id`: identificador estável.
-- `input`: entrada renderizada no prompt.
-- `expected_output`: resposta esperada, schema ou referência.
-- `assertion`: regra de avaliação.
-- `weight`: peso no score global.
-- `tags`: agrupadores para breakdown de score.
+- `id`: stable identifier.
+- `input`: input rendered in the prompt.
+- `expected_output`: expected response, schema or reference.
+- `assertion`: evaluation rule.
+- `weight`: weight on the global score.
+- `tags`: groups for score breakdowns.
 
-`weight` é peso do caso inteiro. Para pesar chaves dentro de um JSON estruturado,
-use `assertion.weights` em `field_by_field`, não `weight`.
+`weight` is the whole case weight. To weigh keys within a structured JSON, use `assertion.weights`
+in `field_by_field`, not `weight`.
 
-Quando o output do modelo é estruturado, `expected_output` pode ser o payload esperado:
+When the model output is structured, `expected_output` can be the expected payload:
 
 ```yaml
 expected_output: |
-  {'classification': 'Prazo', 'text_validation': 'Intime-se no prazo de 5 dias.'}
+  {'classification': 'Deadline', 'text_validation': 'Serve notice within 5 days.'}
 assertion:
   type: json_schema
 ```
 
-Se o `config.yaml` declara `target_model.output_format.type: json_schema`, o Crucible
-usa o schema do config para validar expected/actual e compara os campos parseados.
-Isso permite usar gabaritos gerados automaticamente sem reescrever cada assertion.
+If `config.yaml` declares `target_model.output_format.type: json_schema`, Crucible uses the
+configuration schema to validate expected/actual outputs and compare parsed fields. This allows you
+to use automatically
+generated benchmarks without rewriting each assertion.
 
-Quando alguma chave é mais importante que outra, escreva a assertion explicitamente:
+When one key is more important than another, write the assertion explicitly:
 
 ```yaml
 expected_output: |
-  {"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}
+  {"classification": "Deadline", "text_validation": "Serve notice within 5 days."}
 assertion:
   type: field_by_field
   weights:
@@ -71,79 +72,79 @@ assertion:
 
 ## Assertion
 
-Regra que compara `expected_output` com o output real do modelo. Assertions podem ser
-determinísticas, estruturais, semânticas ou baseadas em LLM-as-judge.
+Rule comparing `expected_output` to the actual output of the model. Assertions can be deterministic,
+structural, semantic or LLM-as-judge-based.
 
-Use a assertion mais barata que represente o requisito.
+Use the cheapest assertion that represents the requirement.
 
 ## TargetModel
 
-Modelo cujo comportamento você quer melhorar com o prompt. Ele roda muitas vezes,
-então custo, latência e rate limit importam.
+Model whose behavior you want to improve with the prompt. It runs many times, so cost, latency, and
+rate limits matter.
 
 ## ReasoningModel
 
-Modelo usado para diagnosticar falhas e propor o próximo prompt. Ele roda menos vezes,
-mas costuma ser mais forte e mais caro.
+Model used to diagnose failures and propose the next prompt. It runs fewer times, but is usually
+more capable and more expensive.
 
 ## JudgeModel
 
-Modelo opcional usado por assertions `llm_judge`. Se não for informado, o caminho
-padrão usa o modelo de raciocínio como judge.
+Optional model used by assertions `llm_judge`. If unspecified, the default path uses the reasoning
+model as the judge.
 
 ## OptimizationRun
 
-Agregado que guarda uma execução completa:
+Aggregate holding a complete execution:
 
-- prompt inicial;
+- initial prompt;
 - config;
-- gabarito;
-- iterações;
-- melhor iteração;
-- motivo de parada;
-- scores de validação quando split está habilitado.
+- benchmark;
+- iterations;
+- best iteration;
+- reason for stopping;
+- validation scores when split is enabled.
 
-Quando `use_gabarito_split` está habilitado, a run otimiza usando apenas o split de
-treino. Depois que escolhe o melhor prompt, valida esse prompt nos splits de `val` e
-`test` e grava os resultados em `validation_scores`.
+When `use_benchmark_split` is enabled, the run optimizes using only the training split. After
+selecting the best prompt, it validates that prompt on the `val` and `test` splits and records the
+results in `validation_scores`.
 
 ## Iteration
 
-Uma volta do loop:
+One pass through the loop:
 
-1. renderiza prompt;
-2. executa casos;
-3. avalia assertions;
-4. agrega score;
-5. opcionalmente refina o prompt.
+1. renders prompt;
+2. executes cases;
+3. evaluates assertions;
+4. aggregates score;
+5. optionally refines the prompt.
 
-`v0` é o prompt original.
+`v0` is the original prompt.
 
 ## Verdict
 
-Resultado de um caso em uma iteração:
+Result of a case in an iteration:
 
 - score;
 - pass/fail;
-- output do modelo;
-- latência;
+- model output;
+- latency;
 - tokens;
-- custo;
-- detalhe da assertion;
-- marcação de regressão.
+- cost;
+- assertion detail;
+- regression flag.
 
 ## Best-Ever
 
-A run retorna o melhor prompt já visto, não necessariamente o último prompt gerado.
-Isso evita perder qualidade quando uma iteração posterior regride.
+The run returns the best prompt ever seen, not necessarily the last generated prompt. This avoids
+losing quality when a later iteration regresses.
 
-## Estado Local
+## Local State
 
-`.crucible/` é parte do produto:
+`.crucible/` is part of the product:
 
-- SQLite para consulta;
-- arquivos para auditoria humana;
-- relatórios para compartilhamento;
-- cache para evitar chamadas repetidas.
+- SQLite for queries;
+- files for human audit;
+- reports for sharing;
+- cache to avoid repeated calls.
 
-Use `/tmp` só para experimentos descartáveis.
+Use `/tmp` only for disposable experiments.

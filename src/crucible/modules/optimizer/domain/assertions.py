@@ -159,7 +159,6 @@ def _not_json_schema_result() -> AssertionResult:
     )
 
 
-
 def _compare_objects(expected: dict[str, Any], actual: dict[str, Any]) -> AssertionResult:
     fields = list(expected.keys())
     if not fields:
@@ -437,20 +436,16 @@ def _field_judge_rubric(field: str, spec: FieldAssertionSpec) -> str:
     if spec.rubric.strip():
         return spec.rubric
     return (
-        f"Avalie o campo '{field}'. A resposta atual deve ser equivalente ao valor esperado. "
-        "Se houver input original no esperado, verifique também se a resposta atual está "
-        "apoiada pelo texto fonte e não inventa informação."
+        f"Evaluate the field '{field}'. The actual response must match the expected value. "
+        "If the expected value includes the original input, also check that the actual response is "
+        "supported by the source text and does not invent information."
     )
 
 
 def _field_judge_expected(field: str, expected: str, context: AssertionContext) -> str:
     if context.input_text is None:
         return expected
-    return (
-        f"Campo: {field}\n"
-        f"Valor esperado:\n{expected}\n\n"
-        f"Input original:\n{context.input_text}"
-    )
+    return f"Field: {field}\nExpected value:\n{expected}\n\nOriginal input:\n{context.input_text}"
 
 
 class PydanticModel(BaseAssertion):
@@ -553,17 +548,17 @@ class LLMJudge(BaseAssertion):
         actual: str,
         swapped: bool,
     ) -> dict[str, Any]:
-        left_label = "Atual" if swapped else "Esperado"
-        right_label = "Esperado" if swapped else "Atual"
+        left_label = "Actual" if swapped else "Expected"
+        right_label = "Expected" if swapped else "Actual"
         left = actual if swapped else expected
         right = expected if swapped else actual
         prompt = (
-            "Avalie se a resposta atual atende ao esperado.\n"
-            f"Rubrica: {self.rubric}\n"
+            "Evaluate whether the actual response meets the expected response.\n"
+            f"Rubric: {self.rubric}\n"
             f"Calibration examples: {json.dumps(self.calibration_examples, ensure_ascii=False)}\n\n"
             f"{left_label}:\n{left}\n\n"
             f"{right_label}:\n{right}\n\n"
-            'Retorne JSON estrito: {"score": 0.0, "passed": false, "rationale": "..."}'
+            'Return strict JSON: {"score": 0.0, "passed": false, "rationale": "..."}'
         )
         result = await provider.complete(prompt, params)
         payload = _parse_judge_payload(result.text)

@@ -1,45 +1,45 @@
 name: customer-support-triage
 version: v1
-description: Classificacao de mensagens reais de suporte por categoria operacional.
+description: Classification of real support messages by operational category.
 cases:
   - id: billing-001
-    input: "Fui cobrado duas vezes na mesma fatura e preciso de estorno."
+    input: "I was charged twice on the same invoice and need a refund."
     expected_output: "billing"
     assertion:
       type: contains
     tags: [billing, refund]
   - id: billing-002
-    input: "Nao recebi a nota fiscal do plano anual."
+    input: "I have not received the invoice for the annual plan."
     expected_output: "billing"
     assertion:
       type: contains
     tags: [billing, invoice]
   - id: technical-001
-    input: "O app fecha sozinho quando tento anexar um PDF."
+    input: "The app closes unexpectedly when I try to attach a PDF."
     expected_output: "technical"
     assertion:
       type: contains
     tags: [technical, mobile]
   - id: technical-002
-    input: "A API esta retornando erro 500 desde ontem."
+    input: "The API has been returning error 500 since yesterday."
     expected_output: "technical"
     assertion:
       type: contains
     tags: [technical, api]
   - id: account-001
-    input: "Preciso trocar o email do administrador da conta."
+    input: "I need to change the account administrator email."
     expected_output: "account"
     assertion:
       type: contains
     tags: [account]
   - id: cancellation-001
-    input: "Quero cancelar minha assinatura no fim do mes."
+    input: "I want to cancel my subscription at the end of the month."
     expected_output: "cancellation"
     assertion:
       type: contains
     tags: [cancellation]
   - id: other-001
-    input: "Vocês têm parceria para eventos educacionais?"
+    input: "Do you have partnerships for educational events?"
     expected_output: "other"
     assertion:
       type: contains

@@ -1,23 +1,23 @@
 # Crucible VSCode Extension
 
-Scaffold inicial da extensão VSCode do Crucible.
+Initial scaffold of the Crucible VSCode extension.
 
-## Comandos
+## Commands
 
 - `Crucible: Validate Prompt`
 - `Crucible: Optimize Prompt`
 - `Crucible: Open Dashboard`
 - `Crucible: Open Latest HTML Report`
-- `Crucible: Select Prompt, Gabarito and Config`
+- `Crucible: Select Prompt, Benchmark and Config`
 
-## Configurações
+## Settings
 
-- `crucible.command`: prefixo do comando, padrão `uv run crucible`.
-- `crucible.configPath`: caminho do `config.yaml`.
-- `crucible.promptPath`: caminho do `prompt.txt`.
-- `crucible.gabaritoPath`: caminho do `gabarito.yaml`.
+- `crucible.command`: command prefix, default `uv run crucible`.
+- `crucible.configPath`: `config.yaml` path.
+- `crucible.promptPath`: `prompt.txt` path.
+- `crucible.benchmarkPath`: `benchmark.yaml` path.
 
-## Desenvolvimento
+## Development
 
 ```bash
 npm install
@@ -25,4 +25,4 @@ npm run compile
 npm run package
 ```
 
-Abra esta pasta no VSCode e execute a extensão em modo debug.
+Open this folder in VSCode and run the extension in debug mode.

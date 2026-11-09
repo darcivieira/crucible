@@ -1,87 +1,80 @@
-# Documentação Crucible
+# Crucible Documentation
 
-Crucible é um framework local-first para otimizar prompts empiricamente contra
-gabaritos versionados.
+Crucible is a local-first framework for empirically optimizing prompts against versioned benchmarks.
 
-Use este índice conforme o que você precisa fazer.
+Use this index to find what you need.
 
-## Primeiros Passos
+## First Steps
 
-- [Guia do usuário](user-guide.md): explicação prática para criar, validar,
-  comparar, otimizar e inspecionar prompts.
-- [Quickstart](quickstart.md): crie um projeto, rode uma otimização e inspecione os
-  resultados.
-- [Tutorial end-to-end](tutorials/customer-support-end-to-end.md): fluxo completo de
-  triagem de suporte, report e exports.
-- [Conceitos](concepts.md): entenda prompt, gabarito, test case, assertion e run.
-- [Referência CLI](cli.md): comandos e flags disponíveis.
-- [Configuração](configuration.md): referência completa do `config.yaml`.
+- [User Guide](user-guide.md): Practical explanation for creating, validating, comparing, optimizing
+  and inspecting prompts.
+- [Quickstart](quickstart.md): Create a project, run an optimization and inspect the results.
+- [End-to-end tutorial](tutorials/customer-support-end-to-end.md): Full flow of support triage,
+  report and exports.
+- [Concepts](concepts.md): understand prompt, benchmark, test case, assertion and run.
+- [CLI Reference](cli.md): commands and flags available.
+- [Configuration](configuration.md): full reference of `config.yaml`.
 
-## Guias Por Cenário
+## Guides by Scenario
 
-- [Prompt simples](guides/simple-prompt.md): avaliação e otimização de texto livre.
-- [Saída JSON estruturada](guides/structured-json.md): `output_format` mais
-  assertions estruturais.
-- [LLM-as-judge](guides/llm-as-judge.md): avaliação subjetiva com rubrica.
-- [Train/val/test](guides/train-val-test.md): reduzir overfitting ao gabarito.
-- [Comparação de modelos](guides/model-comparison.md): escolher target por score,
-  custo e custo-benefício.
-- [Cache do provider](guides/provider-cache.md): reduzir custo com contexto cacheado.
-- [Uso em CI](guides/ci.md): validação de regressões em pull requests.
-- [Uso via SDK](guides/sdk.md): integração Python programática.
-- [Plugins](guides/plugins.md): assertions e importadores de domínio.
+- [Simple prompt](guides/simple-prompt.md): free text evaluation and optimization.
+- [Structured JSON output](guides/structured-json.md): `output_format` plus structural assertions.
+- [LLM-as-Judge](guides/llm-as-judge.md): Subjective evaluation with a rubric.
+- [Train/val/test](guides/train-val-test.md): reduce overfitting to benchmark.
+- [Model comparison](guides/model-comparison.md): choose target by score, cost and value for money.
+- [Provider Cache](guides/provider-cache.md): reduce cost with cached context.
+- [Use in CI](guides/ci.md): pull requests regression validation.
+- [Use via SDK](guides/sdk.md): Python programmatic integration.
+- [Plugins](guides/plugins.md): assertions and domain importers.
 
-## Autores De Avaliação
+## Authoring Evaluations
 
-- [Gabaritos e Assertions](gabaritos-and-assertions.md): escreva casos de teste
-  robustos.
-- [Scoring](scoring.md): entenda score global, pesos, breakdowns e métricas
-  operacionais.
-- [Providers](providers.md): configure Ollama, OpenAI, Anthropic, Google, OpenRouter,
-  vLLM e llama.cpp.
-- [Importadores e Exports](importers-and-exports.md): mova dados para dentro e fora
-  do Crucible.
+- [Benchmarks and Assertions](benchmarks-and-assertions.md): Write robust test cases.
+- [Scoring](scoring.md): understand global score, weights, breakdowns and operational metrics.
+- [Providers](providers.md): configure Ollama, OpenAI, Anthropic, Google, OpenRouter, vLLM and
+  llama.cpp.
+- [Importers and Exports](importers-and-exports.md): Move data in and out of the Crucible.
 
-## Python, API E Produto
+## Python, API, and Product
 
-- [SDK Python](sdk.md): use Crucible programaticamente.
-- [REST API](api.md): crie runs e consulte histórico via HTTP.
-- [Dashboard](dashboard.md): inspecione runs, verdicts, diffs e regressões.
-- [Docker](docker.md): rode dashboard/API/CLI em container e publique imagem.
-- [Operação](operations.md): estado local, custos, segredos, CI e limpeza.
-- [Release](release.md): checks, smoke tests e artefatos para publicação open source.
-- [UX e Interfaces](interfaces.md): visão prática das superfícies CLI, SDK, API,
-  dashboard, reports e exports.
+- [Python SDK](sdk.md): use Crucible programmatically.
+- [REST API](api.md): create runs and see history via HTTP.
+- [Dashboard](dashboard.md): inspect runs, verdicts, diffs and regressions.
+- [Docker](docker.md): run the dashboard/API/CLI in a container and publish the image.
+- [Operations](operations.md): local state, costs, secrets, CI, and cleanup.
+- [Release](release.md): checks, smoke tests and artifacts for open source publication.
+- [UX and Interfaces](interfaces.md): practical view of CLI, SDK, API, dashboard, reports and
+  exports surfaces.
 
-## Extensibilidade E Contribuição
+## Extensibility and Contribution
 
-- [Plugins](plugins.md): assertions e importadores customizados.
-- [Arquitetura e Implementação](architecture.md): organização do código e fluxo.
-- [Decisões Técnicas](technical-decisions.md): concorrência, cache, variância,
-  budgets, persistência e limites atuais.
-- [Desenvolvimento](development.md): testes, lint, tipagem e workflow.
-- [Extensão VSCode](../vscode-extension/): scaffold da extensão do editor.
+- [Plugins](plugins.md): assertions and custom importers.
+- [Architecture and Implementation](architecture.md): code organization and flow.
+- [Technical Decisions](technical-decisions.md): concurrency, cache, variance, budgets, persistence
+  and current limits.
+- [Development](development.md): tests, lint, typing and workflow.
+- [Extension VSCode](../vscode-extension/): editor extension scaffold.
 
-## Mapeamento Da Especificação Original
+## Original Specification Mapping
 
-- Item 2, Conceitos Centrais: [Conceitos](concepts.md).
-- Item 4, Sistema de Scoring: [Scoring](scoring.md) e
-  [Gabaritos e Assertions](gabaritos-and-assertions.md).
-- Item 5, Arquitetura: [Arquitetura e Implementação](architecture.md).
-- Item 8, Decisões Técnicas: [Decisões Técnicas](technical-decisions.md).
-- Item 9, UX e Interfaces: [UX e Interfaces](interfaces.md).
+- Item 2, Central Concepts: [Concepts](concepts.md).
+- Item 4, Scoring System: [Scoring](scoring.md) and [Benchmarks and
+  Assertions](benchmarks-and-assertions.md).
+- Item 5, Architecture: [Architecture and Implementation](architecture.md).
+- Item 8, Technical Decisions: [Technical Decisions](technical-decisions.md).
+- Item 9, UX and Interfaces: [UX and Interfaces](interfaces.md).
 
-## Exemplos
+## Examples
 
-- [Projeto básico local](../examples/basic/)
-- [Saída estruturada com JSON Schema](../examples/structured-output/): contrato,
-  payload esperado e comparação campo a campo.
-- [Triagem de suporte](../examples/customer-support-triage/)
-- [LLM-as-judge para risco](../examples/llm-judge-risk/)
+- [Local basic project](../examples/basic/)
+- [Structured output with JSON Schema](../examples/structured-output/): contract, expected payload
+  and field-by-field comparison.
+- [Support Triage](../examples/customer-support-triage/)
+- [LLM-as-judge for risk](../examples/llm-judge-risk/)
 - [Train/val/test](../examples/train-val-test/)
-- [Comparação de modelos](../examples/model-comparison/)
+- [Model comparison](../examples/model-comparison/)
 
-## Comunidade
+## Community
 
 - [Contributing](../CONTRIBUTING.md)
 - [Code of Conduct](../CODE_OF_CONDUCT.md)

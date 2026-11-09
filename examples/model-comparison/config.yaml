@@ -37,7 +37,7 @@ comparison_models:
           properties:
             classification:
               type: string
-              enum: [Prazo, Intimacao, Outro]
+              enum: [Deadline, Notice, Other]
             text_validation:
               type: string
   - label: gpt-mini
@@ -63,6 +63,6 @@ comparison_models:
           properties:
             classification:
               type: string
-              enum: [Prazo, Intimacao, Outro]
+              enum: [Deadline, Notice, Other]
             text_validation:
               type: string

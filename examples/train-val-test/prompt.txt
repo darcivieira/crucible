@@ -1,5 +1,5 @@
-Classifique a solicitacao abaixo como billing, technical, account, cancellation ou other.
-Responda apenas com a categoria.
+Classify the request below as billing, technical, account, cancellation, or other.
+Respond with only the category.
 
-Solicitacao:
+Request:
 {input}

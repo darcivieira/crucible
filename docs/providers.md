@@ -1,8 +1,8 @@
 # Providers
 
-Providers implementam `ModelProvider.complete(prompt, params)`.
+Providers implement `ModelProvider.complete(prompt, params)`.
 
-Providers configurados:
+Configured Providers:
 
 - `ollama`
 - `openai`
@@ -13,7 +13,7 @@ Providers configurados:
 - `llamacpp`
 - `fake`
 
-## ModelSpec Comum
+## Common ModelSpec
 
 ```yaml
 provider: openai
@@ -37,7 +37,7 @@ cost_per_million_output_tokens_usd: 0.0
 
 ## Ollama
 
-Variável de ambiente:
+Environment variable:
 
 ```bash
 CRUCIBLE_OLLAMA_URL=http://localhost:11434
@@ -57,10 +57,9 @@ target_model:
     max_concurrent: 1
 ```
 
-Recomendado para modelos alvo locais. Mantenha concorrência baixa quando o modelo
-usa uma única GPU.
+Recommended for local target models. Keep concurrency low when the model uses a single GPU.
 
-Ollama também recebe `output_format`:
+Ollama also receives `output_format`:
 
 ```yaml
 target_model:
@@ -77,12 +76,12 @@ target_model:
           type: string
 ```
 
-Para `json_object`, o adapter envia `format: json`. Para `json_schema`, envia o
-schema em `format`.
+To `json_object`, the adapter sends `format: json`. To `json_schema`, it sends the schema in
+`format`.
 
-## APIs OpenAI-Compatible
+## OpenAI-Compatible APIs
 
-`openai`, `openrouter` e `vllm` usam payload no estilo chat completions.
+`openai`, `openrouter` and `vllm` use payload in chat completions style.
 
 OpenAI:
 
@@ -97,7 +96,7 @@ reasoning_model:
   role: reasoning
 ```
 
-Para usar a Responses API da OpenAI, configure `api_mode: responses`:
+To use the OpenAI Responses API, configure `api_mode: responses`:
 
 ```yaml
 target_model:
@@ -118,13 +117,13 @@ target_model:
           type: string
 ```
 
-Nesse modo, o adapter envia o schema em `text.format`. Em `api_mode:
-chat_completions`, ele envia em `response_format`.
+In this mode, the adapter sends the schema in `text.format`. In `api_mode: chat_completions`, it
+sends in `response_format`.
 
-### Prompt Caching Na OpenAI
+### Prompt Caching In OpenAI
 
-Quando `provider_cache.enabled` está ativo, o adapter OpenAI recebe parâmetros extras
-para instrumentar prompt caching:
+When `provider_cache.enabled` is active, the OpenAI adapter receives extra parameters to instrument
+prompt caching:
 
 ```yaml
 provider_cache:
@@ -132,13 +131,13 @@ provider_cache:
   openai_retention: 24h
 ```
 
-A OpenAI não expõe, nesse fluxo, um `cache_id` manual como o Google. O cache é
-automático do provider. O Crucible envia `prompt_cache_key` e, quando configurado,
-`prompt_cache_retention: 24h` em `params.extra`; depois registra
-`cached_tokens_in` se a resposta trouxer tokens cacheados no bloco de usage.
+OpenAI does not display a manual `cache_id` like Google. The cache is automatic from the provider.
+Crucible sends `prompt_cache_key` and, when configured, `prompt_cache_retention: 24h` in
+`params.extra`; then records `cached_tokens_in` if the response brings cached tokens in the usage
+block.
 
-Use `cost_per_million_cached_input_tokens_usd` para que o relatório calcule custo
-com a tarifa de input cacheado:
+Use `cost_per_million_cached_input_tokens_usd` for the report to calculate cost with the cached
+input tariff:
 
 ```yaml
 target_model:
@@ -189,7 +188,7 @@ reasoning_model:
   role: reasoning
 ```
 
-O adapter usa o formato da Messages API.
+The adapter uses the format of the Messages API.
 
 ## Google
 
@@ -204,11 +203,10 @@ reasoning_model:
   role: reasoning
 ```
 
-### Context Cache No Gemini
+### Context Cache in Gemini
 
-O Google/Gemini tem cache explícito. Com `provider_cache.enabled`, o Crucible cria um
-`cachedContents` por `case.input` antes da iteração e passa esse cache nas chamadas
-do target.
+Google/Gemini has explicit cache. With `provider_cache.enabled`, Crucible creates a `cachedContents`
+by `case.input` before iteration and passes this cache on target calls.
 
 ```yaml
 provider_cache:
@@ -226,14 +224,14 @@ target_model:
   cost_per_million_output_tokens_usd: 0.40
 ```
 
-Na execução, o prompt enviado ao modelo substitui `{input}` por uma indicação de que
-o conteúdo está no contexto cacheado do provider. O input real fica no cache remoto.
-A run registra `provider_cache_id` por verdict e `cached_tokens` quando o Google
-retorna `cachedContentTokenCount`.
+In the execution, the prompt sent to the model replaces `{input}` with an indication that the
+content is in the cached context of the provider. The actual input is in the remote cache. Run
+records `provider_cache_id` by verdict and `cached_tokens` when Google returns
+`cachedContentTokenCount`.
 
-Use `on_error: fail` quando cache é obrigatório para custo ou limite de contexto. Use
-`on_error: fallback` quando você prefere concluir a run mesmo que o provider negue o
-cache, por exemplo por permissão, billing ou modelo incompatível.
+Use `on_error: fail` when cache is required for cost or context limit. Use `on_error: fallback` when
+you prefer to complete run even if the provider denies cache, for example by permission, billing or
+incompatible model.
 
 ## llama.cpp
 
@@ -248,11 +246,11 @@ target_model:
   role: target
 ```
 
-O adapter atual chama `/completion`.
+The current adapter calls `/completion`.
 
 ## Fake Provider
 
-Usado em testes e demos:
+Used in tests and demos:
 
 ```yaml
 target_model:
@@ -261,11 +259,11 @@ target_model:
   role: target
 ```
 
-O fake provider padrão ecoa o prompt. Testes podem injetar um responder customizado.
+The default fake provider echoes the prompt. Tests can inject a custom response.
 
 ## Embeddings
 
-`embedding_similarity` usa `embedding_model` quando configurado:
+`embedding_similarity` uses `embedding_model` when configured:
 
 ```yaml
 embedding_model:
@@ -274,17 +272,17 @@ embedding_model:
   role: embedding
 ```
 
-Providers de embedding disponíveis:
+Available embedding providers:
 
-- `fake`: embedding determinístico por hash para testes.
+- `fake`: deterministic embedding per hash for testing.
 - `openai`: `/v1/embeddings`.
-- `openrouter`: `/v1/embeddings`, quando suportado pelo modelo.
-- `vllm`: `/v1/embeddings`, quando o servidor expõe o endpoint.
+- `openrouter`: `/v1/embeddings` when supported by the model.
+- `vllm`: `/v1/embeddings`, when the server displays the endpoint.
 - `ollama`: `/api/embeddings`.
 
-## Retry E Rate Limit
+## Retries and Rate Limits
 
-O provider HTTP faz retry para:
+The HTTP provider retries these responses:
 
 - `429`
 - `500`
@@ -298,12 +296,12 @@ Backoff:
 retry_backoff_seconds * 2 ** attempt
 ```
 
-Concorrência e requests por minuto são aplicados por `RateLimitedProvider`.
+Concurrency and requests per minute are applied by `RateLimitedProvider`.
 
-## Adicionar Provider
+## Add Provider
 
-1. Crie um adapter em `src/crucible/modules/optimizer/adapters/providers/`.
-2. Implemente `payload()` e `parse()` se puder herdar de `HttpProvider`.
-3. Ou implemente `complete()` diretamente.
-4. Registre no `ModelProviderFactory`.
-5. Adicione testes de payload, parsing e erro.
+1. Create an adapter in `src/crucible/modules/optimizer/adapters/providers/`.
+2. Implement `payload()` and `parse()` if you can inherit from `HttpProvider`.
+3. Or implement `complete()` directly.
+4. Register it with `ModelProviderFactory`.
+5. Add payload, parsing and error tests.

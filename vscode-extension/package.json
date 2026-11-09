@@ -48,7 +48,7 @@
       },
       {
         "command": "crucible.selectFiles",
-        "title": "Crucible: Select Prompt, Gabarito and Config"
+        "title": "Crucible: Select Prompt, Benchmark and Config"
       }
     ],
     "configuration": {
@@ -69,10 +69,10 @@
           "default": "prompt.txt",
           "description": "Path to prompt file relative to the workspace root."
         },
-        "crucible.gabaritoPath": {
+        "crucible.benchmarkPath": {
           "type": "string",
-          "default": "gabarito.yaml",
-          "description": "Path to gabarito file relative to the workspace root."
+          "default": "benchmark.yaml",
+          "description": "Path to benchmark file relative to the workspace root."
         }
       }
     }

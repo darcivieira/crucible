@@ -1,72 +1,71 @@
 # Dashboard
 
-O dashboard é uma aplicação FastAPI local sobre `.crucible/crucible.sqlite`.
+The dashboard is a local FastAPI application on `.crucible/crucible.sqlite`.
 
-Suba com:
+Start it with:
 
 ```bash
 uv run crucible serve
 ```
 
-URL padrão:
+Default URL:
 
 ```text
 http://127.0.0.1:7777
 ```
 
-Para escolher host e porta:
+To choose host and port:
 
 ```bash
 uv run crucible serve --host 0.0.0.0 --port 7777
 ```
 
-Passo a passo:
+Step by step:
 
-1. Rode `uv run crucible serve`.
-2. Abra `http://127.0.0.1:7777`.
-3. Clique em `Nova run`.
-4. Escolha `Validate`, `Optimize` ou `Compare`.
-5. Informe caminhos locais ou cole o conteúdo de `prompt`, `gabarito` e `config`.
-6. Acompanhe a task até terminar.
-7. Abra a run para ver score, verdicts, diffs, prompts e relatórios.
+1. Run `uv run crucible serve`.
+2. Open `http://127.0.0.1:7777`.
+3. Click `New run`.
+4. Choose `Validate`, `Optimize` or `Compare`.
+5. Provide local paths or paste the contents of `prompt`, `benchmark` and `config`.
+6. Monitor the task until it completes.
+7. Open the run to see score, verdicts, diffs, prompts and reports.
 
-O dashboard é local e não tem autenticação. Use em rede confiável.
+Dashboard is local and has no authentication. Use on a trusted network.
 
-## O Que Mudou
+## What Changed
 
-O dashboard deixou de ser apenas uma listagem read-only. Ele agora também ajuda a
-criar execuções locais, acompanhar tasks, interpretar resultados e decidir onde olhar
-primeiro.
+The dashboard is no longer just a read-only listing. It now also helps create local executions,
+track tasks, interpret results and decide where to look first.
 
-Use a UI quando quiser:
+Use the UI when you want:
 
-- rodar `validate` sem sair do navegador;
-- iniciar `optimize` com arquivos locais ou conteúdo colado;
-- comparar modelos alvo com o mesmo prompt e gabarito;
-- acompanhar status/cancelamento de tasks;
-- entender por que uma run parou;
-- filtrar verdicts por falha, regressão, tag, assertion e score;
-- gerar report HTML/JSON/PDF a partir da tela da run.
+- run `validate` without leaving the browser;
+- start `optimize` with local files or pasted content;
+- compare target models with the same prompt and benchmark;
+- monitor status/cancellation of tasks;
+- understand why a run stopped;
+- filter verdicts by failure, regression, tag, assertion and score;
+- generate HTML/JSON/PDF report from run screen.
 
-## Páginas Principais
+## Main Pages
 
 ### `/`
 
-Lista runs com cards de resumo:
+List of runs with summary cards:
 
-- total de runs;
-- runs em andamento;
-- runs concluídas;
-- melhor score recente;
-- custo total listado.
+- total runs;
+- runs in progress;
+- Runs completed;
+- best recent score;
+- total cost of the listed runs.
 
-Filtros por query string:
+Filters by query string:
 
 - `status`
 - `target`
 - `min_score`
 
-Exemplo:
+Example:
 
 ```text
 http://127.0.0.1:7777/?status=completed&target=ollama&min_score=80
@@ -74,68 +73,69 @@ http://127.0.0.1:7777/?status=completed&target=ollama&min_score=80
 
 ### `/runs/{run_id}`
 
-Mostra:
+Show:
 
-- modo da run (`Validate`, `Optimize` ou `Compare`);
+- Run mode (`Validate`, `Optimize` or `Compare`);
 - status;
-- motivo de parada com descrição mais legível;
-- melhor score;
+- stop reason with more legible description;
+- best score;
 - pass rate;
 - threshold;
-- custo total;
-- p95 de latência;
+- total cost;
+- P95 latency;
 - target/reasoning model;
-- sugestão de próximo passo;
-- contrato da tarefa e invariantes preservados;
-- evolução por iteração;
-- worst cases e tags mais fracas;
-- tabela de iterações;
-- melhor prompt.
+- next step suggestion;
+- contract of the task and preserved invariants;
+- progress by iteration;
+- Worst cases and weaker tags;
+- Iteration table;
+- Best prompt.
 
-Em runs de comparação, a tela também mostra um bloco `Comparação de modelos` com:
+In comparison runs, the screen also shows a `Model comparison` block with:
 
-- vencedor por melhor score;
-- vencedor por menor custo;
-- vencedor por melhor custo-benefício;
-- score, pass rate, custo, p95 e tokens cacheados por modelo;
-- vencedor por caso.
+- winner by best score;
+- winner at lower cost;
+- winner for best value for money;
+- score, pass rate, cost, p95 and tokens cached by model;
+- winner per case.
 
-Use essa tela para responder rapidamente:
+Use this screen to respond quickly:
 
-- a run atingiu o objetivo?
-- parou por plateau, budget ou limite de iterações?
-- o score é alto, mas o pass rate segue baixo?
-- quais casos devem ser investigados primeiro?
+- Has the run reached its goal?
+- Did it stop because of a plateau, the budget, or the iteration limit?
+- Is the score high while the pass rate is still low?
+- Which cases should be investigated first?
 
-Quando uma proposta de refino é rejeitada por violar o contrato da tarefa, a tabela
-de iterações mostra o motivo. Isso normalmente indica drift semântico, como trocar
-extração literal por explicação ou remover uma regra de "não inventar".
+When a refining proposal is rejected for violating the task contract, the iterations table shows the
+reason. This usually indicates semantic drift, such as replacing literal extraction for explanation
+or
+remove a rule from "do not invent".
 
-Se houver tentativas de reparo, a mesma tabela mostra um badge com a quantidade de
-reparos e um bloco expansível com as violações devolvidas ao `reasoning_model`. Use
-isso para entender se o modelo corrigiu o prompt depois do feedback ou se a run
-parou com `reasoning_failed_to_refine`.
+If there are attempts to repair, the same table shows a badge with the number of repairs and an
+expandable block with the violations returned to `reasoning_model`. Use this to understand whether
+the model corrected the prompt after feedback or whether the run stopped with
+`reasoning_failed_to_refine`.
 
 ### `/runs/new`
 
-Cria uma task local.
+Create a local task.
 
-O formulário aceita dois modos:
+The form accepts these modes:
 
-- `Validate`: mede o prompt atual e persiste o resultado como run de uma iteração.
-- `Optimize`: executa o loop de otimização normal.
-- `Compare`: executa uma iteração por item em `comparison_models`.
+- `Validate`: measures the current prompt and persists the result as run of an iteration.
+- `Optimize`: Runs the normal optimization loop.
+- `Compare`: performs an iteration per item in `comparison_models`.
 
-Para `prompt`, `gabarito` e `config`, a tela aceita caminho local ou conteúdo colado.
-Se o conteúdo estiver preenchido, ele vence o caminho informado.
+For `prompt`, `benchmark` and `config`, the screen accepts local path or pasted content. If the
+content is filled in, it takes precedence over the specified path.
 
-O campo `config` é um editor YAML completo. Ele cobre parâmetros como modelos,
-budgets, threshold, `output_format`, split train/val/test, rate limits,
-judge/embedding, cache de provider, comparação de modelos e multi-objective.
+The `config` field is a complete YAML editor. It covers parameters such as models, budgets,
+threshold, `output_format`, split train/val/test, rate limits, judge/embedding, provider cache,
+model comparison and multi-objective.
 
 ### `/tasks/{task_id}`
 
-Mostra status da task:
+Show task status:
 
 - `queued`;
 - `running`;
@@ -144,21 +144,21 @@ Mostra status da task:
 - `failed`;
 - `cancelled`.
 
-Enquanto a task está ativa, a página atualiza automaticamente. Quando concluir, abre
-link para a run gerada.
+While the task is active, the page automatically updates. When finished, opens link to the generated
+run.
 
 ### `/runs/{run_id}/diff`
 
-Mostra diff unificado de `v0` para `best` por padrão.
+Shows a unified diff from `v0` to `best` by default.
 
-Query params opcionais:
+Optional Query Params:
 
 - `from_version`
 - `to_version`
 
 ### `/runs/{run_id}/iterations/{version}/verdicts`
 
-Mostra verdicts de uma iteração com filtros:
+Show verdicts of a filtered iteration:
 
 - `case_id`
 - `passed`
@@ -168,35 +168,33 @@ Mostra verdicts de uma iteração com filtros:
 - `min_score`
 - `max_score`
 
-Cada verdict pode ser expandido para ver input, expected output, actual output e
-`assertion_detail`.
+Each verdict can be expanded to see input, expected output, actual output and `assertion_detail`.
 
 ### `/runs/{run_id}/regressions`
 
-Mostra verdicts marcados como regressão.
+Shows verdicts marked as regression.
 
 ### `/compare`
 
-Compara duas runs:
+Compare two runs:
 
 ```text
 /compare?left=<run-a>&right=<run-b>
 ```
 
-## Endpoints JSON Do Dashboard
+## Dashboard JSON Endpoints
 
-São endpoints read-only úteis para scripts locais:
+They are read-only endpoints useful for local scripts:
 
 - `GET /api/runs`
 - `GET /api/runs/{run_id}`
 - `GET /api/runs/{run_id}/verdicts`
 - `GET /api/runs/{run_id}/verdicts?version=1`
 
-## Escopo
+## Scope
 
-O dashboard não é multi-tenant e não tem autenticação. Ele é destinado a inspeção
-local ou uso interno em rede confiável.
+The dashboard is not multi-tenant and has no authentication. It is intended for local inspection or
+trusted internal network use.
 
-Quando você informa caminhos locais no formulário, o processo do dashboard lê esses
-arquivos no filesystem da máquina onde `crucible serve` está rodando. Não exponha o
-dashboard em rede pública.
+When you provide local paths in the form, the dashboard process reads these files in the filesystem
+of the machine where `crucible serve` is running. Do not expose the dashboard on public network.

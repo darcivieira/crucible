@@ -3,7 +3,7 @@ max_iterations: 4
 max_cost_usd: 5.0
 max_wallclock_seconds: 1800
 parallelism: 2
-use_gabarito_split: true
+use_benchmark_split: true
 train_ratio: 0.7
 val_ratio: 0.15
 

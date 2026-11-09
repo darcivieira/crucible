@@ -1,7 +1,6 @@
 # Docker
 
-Crucible pode ser executado como imagem Docker para expor o dashboard, a REST API ou
-qualquer comando do CLI.
+Crucible can be executed as Docker image to expose the dashboard, REST API or any CLI command.
 
 ## Build Local
 
@@ -15,77 +14,77 @@ Smoke test:
 docker run --rm crucible:local --help
 ```
 
-Por padrão, a imagem executa:
+By default, the image executes:
 
 ```bash
 crucible serve --host 0.0.0.0 --port 7777
 ```
 
-## Docker Compose Para Uso Normal
+## Docker Compose for Normal Use
 
-Use o compose runtime para puxar a imagem publicada no Docker Hub:
+Use the compose runtime to pull the image published in the Docker Hub:
 
 ```bash
 docker compose -f docker-compose.runtime.yml pull
 docker compose -f docker-compose.runtime.yml up -d
 ```
 
-Por padrão ele usa:
+By default, it uses:
 
 ```text
 darcivieirajr/crucible:latest
 ```
 
-URLs padrão:
+Default URLs:
 
 - Dashboard: `http://127.0.0.1:7777`
 - API: `http://127.0.0.1:7788`
 
-O estado fica no volume nomeado `crucible-data`. Arquivos de trabalho ficam em
-`./workspace`, montado dentro do container em `/workspace`. Coloque ali prompts,
-gabaritos e configs. O arquivo `.env` da raiz é montado como `/workspace/.env`, que
-é onde o Crucible procura secrets dentro do container.
+The state is in the volume named `crucible-data`. Work files are in `./workspace`, mounted inside
+the container in `/workspace`. Place prompts, benchmarks and configs there. The root `.env` file is
+mounted as `/workspace/.env`, which is where the Crucible seeks secrets inside the container.
 
-Exemplo:
+Example:
 
 ```text
 workspace/
   prompt.txt
-  gabarito.yaml
+  benchmark.yaml
   config.yaml
 ```
 
-## Docker Compose Para Desenvolvimento
+## Docker Compose for Development
 
-O arquivo `docker-compose.yml` é voltado a desenvolvimento local: ele faz build da
-imagem a partir do código atual e monta a raiz do repositório como `/workspace`.
+The `docker-compose.yml` file is focused on local development: it builds the image from the current
+code and mounts the repository root as `/workspace`.
 
 ```bash
 docker compose up --build
 ```
 
-URLs padrão:
+Default URLs:
 
 - Dashboard: `http://127.0.0.1:7777`
 - API: `http://127.0.0.1:7788`
 
-O compose de desenvolvimento também usa o volume nomeado `crucible-data` para
-persistir SQLite, reports, runs e cache em `/data`.
+The development Compose configuration also uses the volume named `crucible-data` to persist SQLite,
+reports,
+runs and cache in `/data`.
 
-Para usar providers externos no compose runtime, mantenha as variáveis no `.env` da
-raiz do diretório onde o compose é executado. O arquivo é montado como read-only
-dentro do container, sem usar `env_file`; assim `docker compose config` não imprime
-os valores dos secrets.
+To use external providers in the compose runtime, keep the variables in the `.env` of the root of
+the directory where the compose is run. The file is mounted as read-only inside the container,
+without using `env_file`; so `docker compose config` does not print the values of the secrets.
 
-Exemplos:
+Examples:
 
 ```env
 CRUCIBLE_OPENAI_API_KEY=...
 CRUCIBLE_GOOGLE_API_KEY=...
 ```
 
-Quando o target for Ollama, vLLM ou llama.cpp rodando no host, o compose aponta para
-`host.docker.internal` por padrão:
+When the target is Ollama, vLLM or llama.cpp running on the host, the Compose configuration points
+to
+`host.docker.internal` by default:
 
 ```env
 CRUCIBLE_OLLAMA_URL=http://host.docker.internal:11434
@@ -93,7 +92,7 @@ CRUCIBLE_VLLM_URL=http://host.docker.internal:8000/v1
 CRUCIBLE_LLAMACPP_URL=http://host.docker.internal:8080
 ```
 
-## Usar A Imagem Como CLI
+## Use Image As CLI
 
 ```bash
 docker run --rm \
@@ -101,33 +100,33 @@ docker run --rm \
   -v crucible-data:/data \
   crucible:local validate \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-## Publicação No Docker Hub
+## Publishing to Docker Hub
 
-O workflow `.github/workflows/publish-docker.yml` roda lint, typecheck, testes,
-build local da imagem e publica no Docker Hub.
+The workflow `.github/workflows/publish-docker.yml` runs lint, typecheck, tests, local image build
+and publishes in the Docker Hub.
 
-Configure estes secrets no GitHub:
+Configure these secrets in GitHub:
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
 
-Opcionalmente configure a variável de repositório:
+Optionally configure the repository variable:
 
-- `DOCKERHUB_REPOSITORY`: por exemplo `seu-usuario/crucible`.
+- `DOCKERHUB_REPOSITORY`: for example `your-username/crucible`.
 
-Se `DOCKERHUB_REPOSITORY` não for configurada, o workflow usa:
+If `DOCKERHUB_REPOSITORY` is not configured, workflow uses:
 
 ```text
 <DOCKERHUB_USERNAME>/crucible
 ```
 
-Tags publicadas:
+Published Tags:
 
-- `latest` em releases/tags versionadas;
-- `X.Y.Z` e `X.Y` para tags `vX.Y.Z`;
-- `edge` quando acionado manualmente sem alterar o input;
-- `sha-<commit>` para rastreabilidade.
+- `latest` in versioned releases/tags;
+- `X.Y.Z` and `X.Y` for `vX.Y.Z` tags;
+- `edge` when run manually without a tag input;
+- `sha-<commit>` for traceability.

@@ -1,10 +1,10 @@
-# Guia: Cache Do Provider
+# Guide: Provider Cache
 
-Use cache remoto quando o input dos casos e grande ou quando o mesmo contexto sera
-reutilizado em validacao, comparacao de modelos ou otimizacao. O objetivo e reduzir
-custo e, em alguns providers, caber melhor no limite de contexto.
+Use remote cache when case input is large or when the same context will be reused in validation,
+model comparison or optimization. The goal is to reduce cost and, in some providers, fit better in
+context limit.
 
-## Configurar
+## Configure
 
 ```yaml
 provider_cache:
@@ -15,13 +15,12 @@ provider_cache:
   openai_retention: 24h
 ```
 
-O Crucible cria cache por `case.input` antes da iteracao quando o provider suporta
-cache explicito. Durante a chamada do target, o prompt renderizado informa que o
-input esta no contexto cacheado.
+Crucible creates `case.input` cache before iteration when the provider supports explicit cache.
+During the target call, the rendered prompt informs that the input is in the cached context.
 
 ## Google/Gemini
 
-Gemini usa cache explicito:
+Gemini uses explicit cache:
 
 ```yaml
 target_model:
@@ -33,33 +32,32 @@ target_model:
   cost_per_million_output_tokens_usd: 0.40
 ```
 
-A run registra `provider_cache_id` por verdict e soma `cached_tokens` quando o
-provider devolve a metrica.
+The run records `provider_cache_id` by verdict and adds `cached_tokens` when the provider returns
+the counter.
 
 ## OpenAI
 
-OpenAI usa prompt caching automatico. O Crucible nao cria um cache ID manual. Quando
-`provider_cache.enabled` esta ativo, ele adiciona `prompt_cache_key` e, se
-configurado, `prompt_cache_retention` nos parametros. Se a API reportar tokens
-cacheados, a run registra `cached_tokens_in`.
+OpenAI uses automatic prompt caching. Crucible does not create a manual ID cache. When
+`provider_cache.enabled` is active, it adds `prompt_cache_key` and, if configured,
+`prompt_cache_retention` in the parameters. If the API reports cached tokens, the run records
+`cached_tokens_in`.
 
-## Erros De Cache
+## Cache Errors
 
 ```yaml
 provider_cache:
   on_error: fail
 ```
 
-Use `fail` quando o cache e requisito operacional. Use `fallback` quando e aceitavel
-rodar sem cache e apenas registrar o warning na run.
+Use `fail` when caching is an operational requirement. Use `fallback` when running without caching
+is acceptable; a warning is recorded on the run.
 
-## Custo
+## Cost
 
-Declare a tarifa de input cacheado:
+Declare the cached input tariff:
 
 ```yaml
 cost_per_million_cached_input_tokens_usd: 0.025
 ```
 
-Se esse campo ficar em `0.0`, o Crucible usa o preco normal de input para evitar
-subestimar custo.
+If this field stays in `0.0`, Crucible uses the normal input price to avoid underestimating cost.

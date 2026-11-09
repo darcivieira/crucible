@@ -51,8 +51,8 @@ async def test_json_equal_compares_structures():
 @pytest.mark.asyncio
 async def test_json_equal_accepts_json_like_strings():
     result = await JsonEqual().evaluate(
-        "{'classification': 'Prazo'}",
-        "```json\n{'classification': 'Prazo'}\n```",
+        "{'classification': 'Deadline'}",
+        "```json\n{'classification': 'Deadline'}\n```",
         AssertionContext(),
     )
     assert result.passed is True
@@ -82,8 +82,8 @@ async def test_field_by_field_supports_per_field_assertions():
     )
 
     result = await assertion.evaluate(
-        '{"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}',
-        '{"classification": "Prazo", "text_validation": "  intime-se   no PRAZO de 5 dias. "}',
+        '{"classification": "Deadline", "text_validation": "Serve notice within 5 days."}',
+        '{"classification": "Deadline", "text_validation": "  serve notice   WITHIN 5 days. "}',
         AssertionContext(),
     )
 
@@ -106,8 +106,8 @@ async def test_field_by_field_scores_qualitative_fields_with_weights():
     )
 
     result = await assertion.evaluate(
-        '{"classification": "Prazo", "text_validation": "prazo de 5 dias"}',
-        '{"classification": "Prazo", "text_validation": "Intime-se no prazo de 5 dias."}',
+        '{"classification": "Deadline", "text_validation": "within 5 days"}',
+        '{"classification": "Deadline", "text_validation": "Serve notice within 5 days."}',
         AssertionContext(),
     )
 
@@ -131,8 +131,8 @@ async def test_field_by_field_uses_embedding_similarity_per_field():
     )
 
     result = await assertion.evaluate(
-        '{"text_validation": "prazo de 5 dias"}',
-        '{"text_validation": "o prazo concedido foi de cinco dias"}',
+        '{"text_validation": "within 5 days"}',
+        '{"text_validation": "the allotted time was five days"}',
         AssertionContext(embedding_provider=Embedder()),
     )
 
@@ -157,28 +157,28 @@ async def test_field_by_field_llm_judge_receives_original_input():
                 "text_validation": {
                     "type": "llm_judge",
                     "threshold": 0.8,
-                    "rubric": "Verifique se o trecho existe no input original.",
+                    "rubric": "Check whether the passage exists in the original input.",
                 }
             },
         }
     )
 
     result = await assertion.evaluate(
-        '{"text_validation": "prazo de 5 dias"}',
-        '{"text_validation": "prazo de 5 dias"}',
-        AssertionContext(judge_provider=judge, input_text="Intime-se no prazo de 5 dias."),
+        '{"text_validation": "within 5 days"}',
+        '{"text_validation": "within 5 days"}',
+        AssertionContext(judge_provider=judge, input_text="Serve notice within 5 days."),
     )
 
     assert result.passed is True
-    assert "Input original" in judge.prompts[0]
-    assert "Intime-se no prazo de 5 dias." in judge.prompts[0]
+    assert "Original input" in judge.prompts[0]
+    assert "Serve notice within 5 days." in judge.prompts[0]
 
 
 @pytest.mark.asyncio
 async def test_field_by_field_extracts_json_like_payload_from_text():
     result = await FieldByField().evaluate(
-        "{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
-        "Resposta:\n{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        "{'classification': 'Deadline', 'text_validation': 'Intime-se.'}",
+        "Resposta:\n{'classification': 'Deadline', 'text_validation': 'Intime-se.'}",
         AssertionContext(),
     )
     assert result.passed is True
@@ -196,8 +196,8 @@ async def test_json_schema_accepts_schema_alias():
 @pytest.mark.asyncio
 async def test_json_schema_rejects_expected_payload_as_schema():
     result = await JsonSchema().evaluate(
-        "{'classification': 'Prazo'}",
-        "{'classification': 'Prazo'}",
+        "{'classification': 'Deadline'}",
+        "{'classification': 'Deadline'}",
         AssertionContext(),
     )
     assert result.passed is False
@@ -219,8 +219,8 @@ async def test_json_schema_compares_expected_payload_when_output_schema_is_confi
     )
 
     result = await JsonSchema().evaluate(
-        "{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
-        "Resposta:\n{'classification': 'Prazo', 'text_validation': 'Intime-se.'}",
+        "{'classification': 'Deadline', 'text_validation': 'Intime-se.'}",
+        "Resposta:\n{'classification': 'Deadline', 'text_validation': 'Intime-se.'}",
         context,
     )
 

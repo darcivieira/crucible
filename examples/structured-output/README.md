@@ -1,47 +1,46 @@
-# Saida Estruturada
+# Structured Output
 
-Este exemplo mostra tres formas de testar uma resposta estruturada.
+This example shows three ways to test a structured response.
 
-## 1. Payload Esperado Com `json_schema`
+## 1. Expected Payload with `json_schema`
 
-Use `gabarito.yaml` quando o gabarito vem de um pipeline que ja preenche o
-`expected_output` com a resposta esperada:
+Use `benchmark.yaml` when the benchmark comes from a pipeline that already fills the
+`expected_output` with the expected response:
 
 ```yaml
 expected_output: |
-  {'summary': 'pagamento em atraso com promessa de quitacao em 7 dias', 'risk': 'medium'}
+  {'summary': 'overdue payment with a promise to settle within 7 days', 'risk': 'medium'}
 assertion:
   type: json_schema
 ```
 
-Como o `config.*.yaml` declara `target_model.output_format.type: json_schema`, o
-Crucible usa o schema do config para validar expected/actual e compara os campos
-parseados. Isso cobre respostas recebidas como string contendo JSON ou literal
-similar a Python.
+As `config.*.yaml` declares `target_model.output_format.type: json_schema`, Crucible uses the config
+schema to validate expected/actual and compares parsed fields. This covers responses received as a
+string containing JSON or literal similar to Python.
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.yaml \
+  --benchmark ./examples/structured-output/benchmark.yaml \
   --config ./examples/structured-output/config.openai-responses.yaml
 ```
 
-## 2. Schema Como Gabarito
+## 2. Schema As Benchmark
 
-Use `gabarito.schema.yaml` quando voce quer validar apenas se o output respeita o
-contrato estrutural:
+Use `benchmark.schema.yaml` when you want to validate only if the output respects the structural
+contract:
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.schema.yaml \
+  --benchmark ./examples/structured-output/benchmark.schema.yaml \
   --config ./examples/structured-output/config.openai-responses.yaml
 ```
 
-## 3. Comparacao Explicita Campo A Campo
+## 3. Explicit Field-by-Field Comparison
 
-Use `gabarito.field-by-field.yaml` quando voce controla o gabarito manualmente e quer
-deixar a intencao clara:
+Use `benchmark.field-by-field.yaml` when you control the benchmark manually and want to make it
+clear:
 
 ```yaml
 assertion:
@@ -51,23 +50,23 @@ assertion:
     summary: 5
 ```
 
-Nesse exemplo, `risk` domina o score do caso. Em um classificador, o mesmo padrao
-poderia ser `classification: 95` e `text_validation: 5`.
+In this example, `risk` dominates the case score. In a classifier, the same pattern could be
+`classification: 95` and `text_validation: 5`.
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.field-by-field.yaml \
+  --benchmark ./examples/structured-output/benchmark.field-by-field.yaml \
   --config ./examples/structured-output/config.openai-responses.yaml
 ```
 
 ## Ollama
 
-Troque o config por `config.ollama.yaml` para executar o mesmo fluxo com Ollama:
+Switch the configuration to `config.ollama.yaml` to run the same flow with Ollama:
 
 ```bash
 uv run crucible validate \
   --prompt ./examples/structured-output/prompt.txt \
-  --gabarito ./examples/structured-output/gabarito.yaml \
+  --benchmark ./examples/structured-output/benchmark.yaml \
   --config ./examples/structured-output/config.ollama.yaml
 ```

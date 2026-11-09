@@ -14,7 +14,7 @@ body:
     id: steps
     attributes:
       label: Reproduction steps
-      description: Include commands, config, prompt/gabarito snippets, and provider used.
+      description: Include commands, config, prompt/benchmark snippets, and provider used.
       value: |
         1.
         2.

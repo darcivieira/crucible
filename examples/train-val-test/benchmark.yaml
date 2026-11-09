@@ -1,44 +1,44 @@
 name: train-val-test-support
 version: v1
-description: Exemplo com casos suficientes para split deterministico train/val/test.
+description: Example with enough cases for a deterministic train/val/test split.
 cases:
   - id: case-001
-    input: "A cobranca veio duplicada."
+    input: "I was charged twice."
     expected_output: "billing"
     assertion: {type: contains}
     tags: [billing]
   - id: case-002
-    input: "Meu cartao foi recusado na renovacao."
+    input: "My card was declined on renewal."
     expected_output: "billing"
     assertion: {type: contains}
     tags: [billing]
   - id: case-003
-    input: "O login com SSO nao funciona."
+    input: "SSO login does not work."
     expected_output: "technical"
     assertion: {type: contains}
     tags: [technical]
   - id: case-004
-    input: "A pagina fica carregando para sempre."
+    input: "The page keeps loading forever."
     expected_output: "technical"
     assertion: {type: contains}
     tags: [technical]
   - id: case-005
-    input: "Quero alterar o dono da organizacao."
+    input: "I want to change the organization owner."
     expected_output: "account"
     assertion: {type: contains}
     tags: [account]
   - id: case-006
-    input: "Como removo um usuario convidado?"
+    input: "How do I remove a guest user?"
     expected_output: "account"
     assertion: {type: contains}
     tags: [account]
   - id: case-007
-    input: "Desejo encerrar minha assinatura."
+    input: "I want to end my subscription."
     expected_output: "cancellation"
     assertion: {type: contains}
     tags: [cancellation]
   - id: case-008
-    input: "Voces oferecem desconto para universidades?"
+    input: "Do you offer a discount for universities?"
     expected_output: "other"
     assertion: {type: contains}
     tags: [other]

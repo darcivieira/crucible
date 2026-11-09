@@ -1,5 +1,5 @@
-Classifique a mensagem de suporte em uma das categorias abaixo e responda apenas com
-a categoria:
+Classify the support message into one of the categories below and respond with only
+the category:
 
 - billing
 - technical
@@ -7,5 +7,5 @@ a categoria:
 - cancellation
 - other
 
-Mensagem:
+Message:
 {input}

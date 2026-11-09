@@ -1,54 +1,53 @@
-# Guia Do Usuário
+# User Guide
 
-Este guia explica o Crucible do ponto de vista de quem quer melhorar ou comparar
-prompts, sem precisar conhecer a arquitetura interna do projeto.
+This guide explains the Crucible from the point of view of those who want to improve or compare
+prompts, without having to know the internal architecture of the project.
 
-## Para Que Serve
+## What It Is For
 
-O Crucible ajuda você a responder perguntas práticas:
+Crucible helps you answer practical questions:
 
-- meu prompt está entregando a resposta esperada?
-- qual modelo responde melhor para meu caso?
-- vale a pena trocar de modelo por custo ou qualidade?
-- o prompt melhorou de uma versão para outra?
-- quais exemplos ainda falham?
-- qual foi o melhor prompt encontrado?
+- Is my prompt delivering the expected response?
+- Which model responds best to my case?
+- Is it worth changing models for cost or quality?
+- has the prompt improved from one version to another?
+- What examples still fail?
+- What was the best prompt found?
 
-Ele faz isso executando um prompt contra um conjunto de exemplos esperados, chamado
-`gabarito`.
+It does this by running a prompt against a set of expected examples, called `benchmark`.
 
-## Os Três Arquivos Principais
+## The Three Main Files
 
-Um projeto Crucible normalmente tem:
+A Crucible project usually has:
 
 ```text
 my-prompt/
   prompt.txt
-  gabarito.yaml
+  benchmark.yaml
   config.yaml
 ```
 
-`prompt.txt` é a instrução enviada ao modelo. Use `{input}` onde o texto de cada caso
-deve entrar:
+`prompt.txt` is the instruction sent to the model. Use `{input}` where the text of each case must
+enter:
 
 ```text
-Classifique o texto abaixo.
+Classify the text below.
 
-Texto:
+Text:
 {input}
 ```
 
-`gabarito.yaml` contém os casos de teste. Cada caso tem um input, uma resposta
-esperada e uma regra de comparação:
+`benchmark.yaml` contains test cases. Each case has an input, an expected response and a comparison
+rule:
 
 ```yaml
-name: exemplo
+name: example
 version: v1
 cases:
   - id: caso-001
-    input: "Intime-se a parte para manifestação no prazo de 5 dias."
+    input: "Notify the party to respond within 5 days."
     expected_output: |
-      {"classification": "Prazo", "text_validation": "prazo de 5 dias"}
+      {"classification": "Deadline", "text_validation": "within 5 days"}
     assertion:
       type: field_by_field
       weights:
@@ -61,8 +60,7 @@ cases:
           type: contains
 ```
 
-`config.yaml` diz quais modelos serão usados e quais limites a execução deve
-respeitar:
+`config.yaml` says which models will be used and what limits the execution must respect:
 
 ```yaml
 threshold: 95.0
@@ -80,99 +78,100 @@ reasoning_model:
   role: reasoning
 ```
 
-## Fluxo Recomendado
+## Recommended Flow
 
-1. Escreva um gabarito pequeno com exemplos representativos.
-2. Rode `validate` para saber se o prompt atual funciona.
-3. Se estiver escolhendo modelo, rode `compare-models`.
-4. Rode `optimize` para tentar melhorar o prompt automaticamente.
-5. Abra o dashboard para entender falhas, diffs e melhor prompt.
-6. Exporte o melhor prompt e os verdicts.
+1. Write a small benchmark with representative examples.
+2. Run `validate` to see if the current prompt works.
+3. If you are choosing model, run `compare-models`.
+4. Run `optimize` to try to improve the prompt automatically.
+5. Open the dashboard to understand failures, diffs, and the best prompt.
+6. Export the best prompt and verdicts.
 
-## Usando Pelo CLI
+## Using CLI
 
-Crie um projeto:
+Create a project:
 
 ```bash
 uv run crucible init ./my-prompt
 ```
 
-Valide o prompt atual:
+Validate the current prompt:
 
 ```bash
 uv run crucible validate \
   --prompt ./my-prompt/prompt.txt \
-  --gabarito ./my-prompt/gabarito.yaml \
+  --benchmark ./my-prompt/benchmark.yaml \
   --config ./my-prompt/config.yaml
 ```
 
-Compare modelos candidatos:
+Compare candidate models:
 
 ```bash
 uv run crucible compare-models \
   --prompt ./examples/model-comparison/prompt.txt \
-  --gabarito ./examples/model-comparison/gabarito.yaml \
+  --benchmark ./examples/model-comparison/benchmark.yaml \
   --config ./examples/model-comparison/config.yaml
 ```
 
-Otimize o prompt:
+Optimize prompt:
 
 ```bash
 uv run crucible optimize --config ./my-prompt/config.yaml
 ```
 
-Gere relatório:
+Generate a report:
 
 ```bash
 uv run crucible report --run latest --format html
 ```
 
-Exporte o melhor prompt:
+Export the best prompt:
 
 ```bash
 uv run crucible export --run latest --format prompt --output ./best_prompt.txt
 ```
 
-## Usando Pelo Dashboard
+## Using the Dashboard
 
-Suba o servidor local:
+Start the local server:
 
 ```bash
 uv run crucible serve
 ```
 
-Abra no navegador:
+Open in browser:
 
 ```text
 http://127.0.0.1:7777
 ```
 
-Na tela `Nova run`, escolha:
+On the `New run` screen, choose:
 
-- `Validate`: para medir o prompt atual.
-- `Optimize`: para pedir ao Crucible que tente melhorar o prompt.
-- `Compare`: para comparar os modelos de `comparison_models`.
+- `Validate`: to measure the current prompt.
+- `Optimize`: to ask Crucible to try to improve the prompt.
+- `Compare`: to compare `comparison_models` models.
 
-Você pode informar caminhos locais para `prompt.txt`, `gabarito.yaml` e
-`config.yaml`, ou colar o conteúdo diretamente nos editores da tela.
+You can provide local paths to `prompt.txt`, `benchmark.yaml` and `config.yaml`, or paste the
+content
+directly into the screen editors.
 
-## Usando Pela API Com Curl
+## Using the API with Curl
 
-Suba a API:
+Start the API:
 
 ```bash
 uv run crucible api --port 7788
 ```
 
-Crie uma run de validação:
+Create a validation run:
 
 ```bash
 curl -s -X POST http://127.0.0.1:7788/runs \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "validate",
-    "prompt": {"template": "Responda apenas: {input}", "variables": ["input"]},
-    "gabarito": {
+    "prompt": {"template": "Respond with only: {input}", "variables": ["input"]},
+    "benchmark": {
       "name": "smoke",
       "version": "v1",
       "cases": [
@@ -191,26 +190,26 @@ curl -s -X POST http://127.0.0.1:7788/runs \
   }'
 ```
 
-A resposta traz um `task_id`. Consulte o status:
+The response includes a `task_id`. Check its status:
 
 ```bash
 curl -s http://127.0.0.1:7788/tasks/<task-id>
 ```
 
-Quando a task terminar, use o `run_id` retornado para ver a run:
+When the task is finished, use the `run_id` returned to see the run:
 
 ```bash
 curl -s http://127.0.0.1:7788/runs/<run-id>
 ```
 
-## Usando Pelo SDK Python
+## Using Python SDK
 
-Crie um arquivo `run_crucible.py`:
+Create a `run_crucible.py` file:
 
 ```python
 import asyncio
 
-from crucible import Gabarito, OptimizationConfig, Optimizer, Prompt
+from crucible import Benchmark, OptimizationConfig, Optimizer, Prompt
 
 
 async def main():
@@ -218,8 +217,8 @@ async def main():
         "target_model": {"provider": "fake", "model_id": "target", "role": "target"},
         "reasoning_model": {"provider": "fake", "model_id": "reasoning", "role": "reasoning"},
     })
-    prompt = Prompt(template="Responda apenas: {input}", variables=["input"])
-    gabarito = Gabarito.model_validate({
+    prompt = Prompt(template="Respond with only: {input}", variables=["input"])
+    benchmark = Benchmark.model_validate({
         "name": "smoke",
         "version": "v1",
         "cases": [
@@ -233,24 +232,24 @@ async def main():
     })
 
     optimizer = Optimizer(config)
-    iteration = await optimizer.validate(prompt, gabarito)
+    iteration = await optimizer.validate(prompt, benchmark)
     print(iteration.score)
 
 
 asyncio.run(main())
 ```
 
-Execute:
+Run:
 
 ```bash
 uv run python run_crucible.py
 ```
 
-## Entendendo O Score
+## Understanding the Score
 
-O score vai de `0` a `100`.
+The score goes from `0` to `100`.
 
-Em respostas estruturadas, use `field_by_field` para pontuar campo a campo. Exemplo:
+In structured responses, use `field_by_field` to score field by field. Example:
 
 ```yaml
 assertion:
@@ -265,13 +264,13 @@ assertion:
       type: contains
 ```
 
-Nesse exemplo, `classification` vale 95% do caso e deve bater exatamente.
-`text_validation` vale 5% e aceita quando o trecho esperado aparece na resposta ou a
-resposta aparece no trecho esperado.
+In this example, `classification` is worth 95% of the case and must match exactly. `text_validation`
+is worth 5% and accepted when the expected snippet appears in the response or the response appears
+in the expected snippet.
 
-## Onde Ficam Os Resultados
+## Where the Results Are
 
-O Crucible grava estado local em `.crucible/`:
+Crucible records local state in `.crucible/`:
 
 ```text
 .crucible/
@@ -281,13 +280,12 @@ O Crucible grava estado local em `.crucible/`:
   cache/
 ```
 
-Isso permite abrir histórico, comparar runs, gerar relatórios e recuperar o melhor
-prompt depois.
+This allows you to open history, compare runs, generate reports, and recover the best prompt later.
 
-## Próximos Passos
+## Next Steps
 
-- Para configurar modelos: [Providers](providers.md).
-- Para escrever gabaritos melhores: [Gabaritos e Assertions](gabaritos-and-assertions.md).
-- Para comparar modelos: [Comparação de modelos](guides/model-comparison.md).
-- Para usar API em integração: [REST API](api.md).
-- Para usar em Python: [SDK Python](sdk.md).
+- To configure models: [Providers](providers.md).
+- To write better benchmarks: [Benchmarks and Assertions](benchmarks-and-assertions.md).
+- To compare models: [Model comparison](guides/model-comparison.md).
+- To use API in integration: [REST API](api.md).
+- To use in Python: [Python SDK](sdk.md).

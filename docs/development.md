@@ -1,4 +1,4 @@
-# Desenvolvimento
+# Development
 
 ## Setup
 
@@ -14,7 +14,7 @@ uv run ruff check .
 uv run mypy src
 ```
 
-Smoke tests opcionais de providers reais:
+Optional smoke tests with real providers:
 
 ```bash
 CRUCIBLE_RUN_PROVIDER_SMOKE=1 \
@@ -23,94 +23,93 @@ CRUCIBLE_SMOKE_MODEL=gemma3:4b \
 uv run pytest tests/test_provider_smoke.py
 ```
 
-Baseline esperado:
+Expected baseline:
 
-- testes passam;
-- Ruff passa;
-- mypy passa;
-- cobertura continua suficiente para pegar regressões.
+- tests pass;
+- Ruff passes;
+- mypy passes;
+- Coverage remains sufficient to catch regressions.
 
-## Estratégia De Testes
+## Test Strategy
 
-Testes evitam chamadas reais a providers.
+Tests avoid real calls to providers.
 
-Padrões usados:
+Patterns used:
 
-- `FakeProvider` para chamadas de modelo;
-- SQLite em diretórios temporários;
+- `FakeProvider` for model calls;
+- SQLite in temporary directories;
 - CLI via `typer.testing.CliRunner`;
 - API/dashboard via `fastapi.testclient.TestClient`.
 
-## Adicionar Features
+## Add Features
 
-Prefira esta ordem:
+Prefer this order:
 
-1. modelo ou protocolo de domínio;
-2. comportamento de aplicação;
+1. model or domain protocol;
+2. application behaviour;
 3. adapter;
-4. entrada CLI/API/dashboard;
-5. testes;
-6. documentação.
+4. CLI/API/dashboard entry;
+5. tests;
+6. documentation.
 
-## Adicionar Provider
+## Add Provider
 
-Veja [Providers](providers.md). Adicione testes para:
+See [Providers](providers.md). Add tests to:
 
-- formato do payload;
-- parsing de resposta;
-- tratamento de erro;
-- registro na factory.
+- payload format;
+- response parsing;
+- error treatment;
+- registration at the factory.
 
-## Adicionar Assertion
+## Add an Assertion
 
-Veja [Gabaritos e Assertions](gabaritos-and-assertions.md). Adicione testes para:
+See [Benchmarks and Assertions](benchmarks-and-assertions.md). Add tests to:
 
-- caso de sucesso;
-- caso de falha;
-- payload inválido/detalhes;
-- parsing YAML/Pydantic do union discriminado.
+- the case of success;
+- the case of failure;
+- invalid payload/details;
+- YAML/Pydantic parsing of the discriminated union.
 
-## Adicionar Comando CLI
+## Add CLI Command
 
-Comandos vivem em `presentation/cli/app.py`.
+Commands live in `presentation/cli/app.py`.
 
-Mantenha comandos finos:
+Keep commands thin:
 
-- carregar arquivos;
-- validar argumentos;
-- chamar application/adapters;
-- renderizar output.
+- load files;
+- validate arguments;
+- call application/adapters;
+- render output.
 
-Não coloque lógica de otimização na CLI.
+Don't put optimization logic into CLI.
 
-## Adicionar Página No Dashboard
+## Add Page on Dashboard
 
-Dashboard vive em `presentation/web/app.py`.
+Dashboard lives in `presentation/web/app.py`.
 
-Ele deve ler de `SQLiteRunStore` ou usar serviços de application. Evite duplicar
-lógica de serialização.
+It should read from `SQLiteRunStore` or use application services. Avoid duplicating serialization
+logic.
 
-## Adicionar Endpoint Na API
+## Add Endpoint in API
 
-API vive em `presentation/api/app.py`.
+API lives in `presentation/api/app.py`.
 
-Mantenha modelos de request/response explícitos. Estado durável deve passar pelos
-stores.
+Maintain explicit request/response models. Durable state must pass through the stores.
 
-## Dívida Técnica Conhecida
+## Known Technical Debt
 
-- SQLite ainda não tem sistema de migração.
-- Contract tests de providers usam mocks, não smoke tests reais.
-- Importadores cobrem formatos comuns, não todas as variações upstream.
-- Templates do dashboard estão embutidos em Python para simplicidade de empacotamento.
+- SQLite doesn't have a migration system yet.
+- Contract tests from providers use mocks, not actual smoke tests.
+- Importers cover common formats, not all upstream variations.
+- Dashboard templates are embedded in Python for packaging simplicity.
 
-## Checklist De Release
+## Release Checklist
 
-Antes de taguear uma release:
+Before posting a release:
 
-1. Rode todos os checks.
-2. Rode o quickstart manualmente.
-3. Gere um relatório HTML de exemplo.
-4. Suba dashboard e API localmente.
-5. Atualize documentação.
-6. Atualize changelog quando existir.
+1. Run all the checks.
+2. Run the quickstart manually.
+3. Generate an example HTML report.
+4. Start the dashboard and API locally.
+5. Update documentation.
+6. Update changelog when it exists.

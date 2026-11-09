@@ -1,32 +1,31 @@
-# Guia: Uso Via SDK
+# Guide: Use via SDK
 
-Use o SDK quando Crucible precisa entrar em outro produto, notebook, pipeline ou
-teste automatizado.
+Use SDK when Crucible needs to enter another product, notebook, pipeline or automated testing.
 
-## Fluxo Básico
+## Basic Flow
 
 ```python
-from crucible import Gabarito, Optimizer, OptimizationConfig, Prompt
+from crucible import Benchmark, Optimizer, OptimizationConfig, Prompt
 
 config = OptimizationConfig.model_validate({...})
 prompt = Prompt.from_file("prompt.txt")
-gabarito = Gabarito.from_yaml("gabarito.yaml")
+benchmark = Benchmark.from_yaml("benchmark.yaml")
 
 optimizer = Optimizer(config)
-iteration = await optimizer.validate(prompt, gabarito)
-run = await optimizer.optimize(prompt, gabarito)
-comparison = await optimizer.compare_models(prompt, gabarito)
+iteration = await optimizer.validate(prompt, benchmark)
+run = await optimizer.optimize(prompt, benchmark)
+comparison = await optimizer.compare_models(prompt, benchmark)
 ```
 
-## Quando Usar SDK Em Vez De CLI
+## When to Use the SDK Instead of the CLI
 
-- você quer injetar providers fake em testes;
-- precisa usar store/cache customizados;
-- quer montar gabaritos dinamicamente;
-- quer comparar modelos candidatos antes de escolher o target;
-- está integrando Crucible em outro backend.
+- you want to inject fake providers into tests;
+- need to use custom store/cache;
+- you want to build benchmarks dynamically;
+- you want to compare candidate models before choosing the target;
+- you are integrating Crucible into another backend.
 
-## Testes Sem Provider Real
+## Tests Without a Real Provider
 
 ```python
 from crucible.modules.optimizer.adapters.providers.fake import FakeProvider
@@ -38,12 +37,11 @@ optimizer = Optimizer(
 )
 ```
 
-## O Que Esperar
+## What to Expect
 
-O SDK retorna objetos Pydantic completos: `Iteration`, `OptimizationRun`, `Verdict` e
-`ScoreReport`. Eles podem ser serializados com `model_dump()` ou `model_dump_json()`.
+The SDK returns complete Pydantic objects: `Iteration`, `OptimizationRun`, `Verdict` and
+`ScoreReport`. They can be serialized with `model_dump()` or `model_dump_json()`.
 
-Em runs de comparação, `OptimizationRun.comparison_summary` traz os vencedores por
-score, custo e custo-benefício, além dos vencedores por caso. Para
-`compare_models`, `target_model` e `reasoning_model` podem ficar ausentes; para
-`validate` e `optimize`, ambos são obrigatórios.
+In comparison runs, `OptimizationRun.comparison_summary` brings the winners per score, cost and
+value for money, in addition to the winners per case. For `compare_models`, `target_model` and
+`reasoning_model` may be absent; for `validate` and `optimize`, both are required.

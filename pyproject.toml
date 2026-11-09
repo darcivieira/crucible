@@ -1,7 +1,7 @@
 [project]
 name = "crucible-prompt-ai"
 version = "0.1.0"
-description = "Prompt optimization framework driven by empirical gabaritos."
+description = "Prompt optimization framework driven by empirical benchmarks."
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"

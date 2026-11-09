@@ -1,6 +1,6 @@
-# Arquitetura
+# Architecture
 
-Crucible usa uma arquitetura em camadas pragmática, inspirada no projeto `oneai`.
+Crucible uses a pragmatic layered architecture, inspired by the `oneai` project.
 
 ```text
 src/crucible/
@@ -14,15 +14,15 @@ src/crucible/
       plugins/
 ```
 
-## Direção Das Dependências
+## Direction of Dependencies
 
 ```text
 presentation -> application -> domain
 adapters     -> domain
-application  -> adapters apenas para wiring padrão
+application  -> adapters only for default wiring
 ```
 
-O domínio não conhece:
+The domain does not know:
 
 - HTTP;
 - SQLite;
@@ -32,23 +32,24 @@ O domínio não conhece:
 
 ## Domain
 
-Arquivos:
+Files:
 
 - `domain/models.py`
 - `domain/assertions.py`
 - `domain/scoring.py`
 - `domain/protocols.py`
 
-Responsabilidades:
+Responsibilities:
 
-- modelos Pydantic;
+
+- Pydantic models;
 - assertions;
-- agregação de score;
-- protocolos de provider/cache/store.
+- score aggregation;
+- provider/cache/store protocols.
 
 ## Application
 
-Arquivos:
+Files:
 
 - `application/optimizer.py`
 - `application/estimates.py`
@@ -56,71 +57,74 @@ Arquivos:
 - `application/exports.py`
 - `application/execution_backends.py`
 
-Responsabilidades:
+Responsibilities:
 
-- loop de otimização;
-- prompts internos de diagnóstico/refinamento;
-- estimativa de custo;
-- geração de reports/exports;
-- seleção de backend de execução.
+
+- optimization loop;
+- internal diagnostic/refining prompts;
+- cost estimate;
+- generation of reports/exports;
+- selection of execution backend.
 
 ## Adapters
 
-Arquivos:
+Files:
 
 - `adapters/providers/*`
 - `adapters/storage.py`
 - `adapters/cache.py`
 - `adapters/importers.py`
 
-Responsabilidades:
+Responsibilities:
 
-- payloads e parsing de providers;
+
+- payloads and parsing of providers;
 - rate limiting;
-- SQLite e storage em arquivos;
+- SQLite and storage in files;
 - cache;
-- conversão de formatos externos.
+- conversion of external formats.
 
 ## Presentation
 
-Arquivos:
+Files:
 
 - `presentation/cli/app.py`
 - `presentation/web/app.py`
 - `presentation/api/app.py`
 
-Responsabilidades:
+Responsibilities:
 
-- parsear input do usuário;
-- chamar serviços de aplicação;
-- renderizar terminal, HTML ou JSON.
 
-Regra de otimização não deve morar nessa camada.
+- parse user input;
+- call application services;
+- render terminal, HTML or JSON.
+
+Optimization rule shouldn't live in that layer.
 
 ## Plugins
 
-Arquivo:
+File:
 
 - `plugins/registry.py`
 
-Plugins registram handlers em um registry local do processo.
+Plugins register handlers in a local process registry.
 
-## Fluxo De Otimização
+## Optimization Flow
 
-1. `Optimizer.optimize(prompt, gabarito)`.
-2. Opcionalmente divide gabarito em train/val/test.
-3. Executa iteração `v0`.
-4. Agrega score.
-5. Para se atingir threshold/budget/tempo/plateau/sem falhas.
-6. Seleciona falhas.
-7. Diagnostica com o reasoning model.
-8. Refina prompt com o reasoning model.
-9. Repete.
-10. Persiste iterações e run final.
+1. `Optimizer.optimize(prompt, benchmark)`.
+2. Optionally divides benchmark into train/val/test.
+3. Runs iteration `v0`.
+4. Aggregates the score.
+5. Stops on threshold, budget, time, plateau, or no failures.
+6. Selects failures.
+7. Diagnoses with the reasoning model.
+8. Refines the prompt with the reasoning model.
+9. Repeats.
+10. Persists iterations and the final run.
 
-## Fluxo De Storage
+## Storage Flow
 
-Store padrão:
+Standard Store:
 
 ```python
 CompositeRunStore(
@@ -129,16 +133,15 @@ CompositeRunStore(
 )
 ```
 
-SQLite alimenta consultas de CLI/API/dashboard. Arquivos ficam para inspeção humana
-e debugging.
+SQLite feeds CLI/API/dashboard queries. Files stay for human inspection and debugging.
 
-## Fluxo Da API
+## API Flow
 
 `POST /runs`:
 
-1. valida request como modelos Pydantic;
-2. cria `task_id`;
-3. agenda `Optimizer.optimize(...)` em background task do FastAPI;
-4. persiste a run em SQLite.
+1. validates the request as Pydantic models;
+2. creates `task_id`;
+3. schedules `Optimizer.optimize(...)` as a FastAPI background task;
+4. persists the run in SQLite.
 
-Task state e estado de run concluída são persistidos no SQLite.
+Task state and completed run state are persisted in SQLite.

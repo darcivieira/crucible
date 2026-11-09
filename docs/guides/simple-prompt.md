@@ -1,66 +1,66 @@
-# Guia: Prompt Simples
+# Guide: Simple Prompt
 
-Use este cenário quando você já tem um prompt em texto livre e quer medir se ele
-responde bem a casos conhecidos.
+Use this scenario when you already have a free text prompt and want to measure if it responds well
+to known cases.
 
-## Quando Usar
+## When to Use
 
-- Você está criando um prompt novo.
-- A saída esperada é texto simples.
-- As validações podem ser determinísticas, como `contains`, `exact_match` ou `regex`.
-- Você quer saber se vale a pena otimizar antes de gastar com reasoning model.
+- You're creating a new prompt.
+- The expected output is plain text.
+- Validations can be deterministic, such as `contains`, `exact_match` or `regex`.
+- You want to know if it's worth optimizing before you spend it on reasoning model.
 
-## Arquivos
+## Files
 
 `prompt.txt`:
 
 ```text
-Classifique a mensagem do cliente e responda de forma objetiva.
+Classify the customer message and respond concisely.
 
-Mensagem:
+Message:
 {input}
 ```
 
-`gabarito.yaml`:
+`benchmark.yaml`:
 
 ```yaml
 name: support-triage
 version: v1
 cases:
   - id: billing-001
-    input: "Fui cobrado duas vezes este mes."
+    input: "I was charged twice this month."
     expected_output: "billing"
     assertion:
       type: contains
     tags: [billing]
 ```
 
-## Fluxo
+## Flow
 
-Primeiro valide:
+First, validate:
 
 ```bash
-uv run crucible validate --prompt prompt.txt --gabarito gabarito.yaml --config config.yaml
+uv run crucible validate --prompt prompt.txt --benchmark benchmark.yaml --config config.yaml
 ```
 
-O `validate` responde se o prompt atual já passa no gabarito. Se falhar, olhe os
-casos, ajuste assertions ou melhore o prompt manualmente.
+`validate` responds if the current prompt already passes the benchmark. If it fails, look at the
+cases, adjust assertions, or manually improve the prompt.
 
-Depois estime custo:
+Then estimate cost:
 
 ```bash
 uv run crucible estimate-cost --config config.yaml
 ```
 
-Só então rode:
+Only then run:
 
 ```bash
 uv run crucible optimize --config config.yaml
 ```
 
-## O Que Esperar
+## What to Expect
 
-- `v0` mostra o desempenho do prompt original.
-- Versões posteriores mostram tentativas de melhoria.
-- O melhor prompt é preservado mesmo se a última iteração piorar.
-- Reports mostram tags e casos que ainda falham.
+- `v0` shows the performance of the original prompt.
+- Subsequent versions show attempts to improve.
+- The best prompt is preserved even if the last iteration gets worse.
+- Reports show tags and cases that still fail.

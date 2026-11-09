@@ -1,16 +1,16 @@
-# Usabilidade
+# Usage
 
-Este documento foi mantido como atalho para links antigos.
+This document was kept as a shortcut to old links.
 
-A documentação de uso foi reorganizada em guias menores:
+The usage documentation was reorganized into smaller guides:
 
 - [Quickstart](quickstart.md)
-- [Guia do usuário](user-guide.md)
-- [Referência CLI](cli.md)
-- [SDK Python](sdk.md)
-- [Configuração](configuration.md)
-- [Comparação de modelos](guides/model-comparison.md)
-- [Cache do provider](guides/provider-cache.md)
-- [Operação](operations.md)
+- [User Guide](user-guide.md)
+- [CLI Reference](cli.md)
+- [Python SDK](sdk.md)
+- [Configuration](configuration.md)
+- [Model comparison](guides/model-comparison.md)
+- [Provider Cache](guides/provider-cache.md)
+- [Operations](operations.md)
 
-Para entender o fluxo recomendado de trabalho, comece pelo [Quickstart](quickstart.md).
+To understand the recommended workflow, start with [Quickstart](quickstart.md).

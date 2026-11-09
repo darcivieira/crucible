@@ -1,11 +1,11 @@
-# Tutorial End-To-End: Triagem De Suporte
+# End-To-End Tutorial: Support Triage
 
-Este tutorial mostra um fluxo completo: escrever prompt, criar gabarito, validar,
-otimizar, abrir report e exportar o melhor prompt.
+This tutorial shows a complete flow: write prompt, create benchmark, validate, optimize, open report
+and export the best prompt.
 
-## Cenário
+## Scenario
 
-Queremos classificar mensagens de suporte em categorias operacionais:
+We want to classify support messages into operational categories:
 
 - `billing`
 - `technical`
@@ -13,50 +13,50 @@ Queremos classificar mensagens de suporte em categorias operacionais:
 - `cancellation`
 - `other`
 
-## Arquivos
+## Files
 
-Use o exemplo:
+Use the example:
 
 ```text
 examples/customer-support-triage/
   prompt.txt
-  gabarito.yaml
+  benchmark.yaml
   config.yaml
 ```
 
-## 1. Validar
+## 1. Validate
 
 ```bash
 uv run crucible validate \
   --prompt examples/customer-support-triage/prompt.txt \
-  --gabarito examples/customer-support-triage/gabarito.yaml \
+  --benchmark examples/customer-support-triage/benchmark.yaml \
   --config examples/customer-support-triage/config.yaml
 ```
 
-Resultado esperado: uma tabela com a iteração `v0`, score, pass rate, custo e p95.
+Expected result: a table with `v0` iteration, score, pass rate, cost and p95.
 
-## 2. Estimar Custo
+## 2. Estimate Cost
 
 ```bash
 uv run crucible estimate-cost --config examples/customer-support-triage/config.yaml
 ```
 
-Resultado esperado: JSON com estimativa de tokens e custo máximo aproximado.
+Expected result: JSON with estimated tokens and approximate maximum cost.
 
-## 3. Otimizar
+## 3. Optimise
 
 ```bash
 uv run crucible optimize --config examples/customer-support-triage/config.yaml
 ```
 
-Resultado esperado:
+Expected result:
 
-- histórico de iterações;
-- run persistida em `.crucible/crucible.sqlite`;
-- report HTML em `.crucible/reports/`;
-- melhor prompt preservado.
+- history of iterations;
+- run persisted in `.crucible/crucible.sqlite`;
+- report HTML in `.crucible/reports/`;
+- best preserved prompt.
 
-## 4. Inspecionar
+## 4. Inspect
 
 ```bash
 uv run crucible list-runs
@@ -65,25 +65,25 @@ uv run crucible diff --run latest --from 0 --to best
 uv run crucible report --run latest --format html
 ```
 
-Abra também:
+Open also:
 
 ```bash
 uv run crucible serve
 ```
 
-## 5. Exportar
+## 5. Export
 
 ```bash
 uv run crucible export --run latest --format prompt --output best_prompt.txt
 uv run crucible export --run latest --format csv --output verdicts.csv
 ```
 
-## Como Ler O Report
+## How to Read The Report
 
-- Score global mostra qualidade agregada.
-- Score por tag mostra categorias fracas.
-- Worst cases indicam onde o prompt precisa de exemplos ou instrução mais clara.
-- Regressões mostram casos que pioraram depois de uma mudança.
+- Global score shows aggregate quality.
+- Score by tag shows weak categories.
+- Worst cases indicate where the prompt needs clearer examples or instruction.
+- Regressions show cases that worsened after a change.
 
-Um bom resultado não é apenas score alto. Verifique também custo, p95 de latência e
-se o prompt final continua legível para manutenção.
+A good result is not only high score. Also check cost, latency p95 and if the final prompt remains
+readable for maintenance.

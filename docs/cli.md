@@ -1,39 +1,39 @@
-# Referência CLI
+# CLI Reference
 
-Todos os comandos são executados com:
+All commands are executed with:
 
 ```bash
 uv run crucible <comando>
 ```
 
-## Fluxos Mais Comuns
+## Common Workflows
 
-Validar um prompt:
+Validate a prompt:
 
 ```bash
 uv run crucible validate \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-Comparar modelos:
+Compare models:
 
 ```bash
 uv run crucible compare-models \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-Otimizar e abrir relatório:
+Optimize and open report:
 
 ```bash
 uv run crucible optimize --config config.yaml
 uv run crucible report --run latest --format html
 ```
 
-Abrir o dashboard:
+Open dashboard:
 
 ```bash
 uv run crucible serve
@@ -41,137 +41,139 @@ uv run crucible serve
 
 ## `init`
 
-Cria um projeto inicial.
+Creates an initial project.
 
 ```bash
 uv run crucible init ./my-project
 ```
 
-Arquivos criados:
+Created files:
 
 - `prompt.txt`
-- `gabarito.yaml`
+- `benchmark.yaml`
 - `config.yaml`
 
 ## `validate`
 
-Executa o prompt atual contra o gabarito sem refinamento.
+Runs the current prompt against the benchmark without refinement.
 
-Use `validate` quando você quer responder:
+Use `validate` when you want to answer:
 
-- meu `prompt.txt` renderiza corretamente?
-- meu `gabarito.yaml` está bem formado?
-- as assertions estão avaliando o que eu espero?
-- o `target_model` está acessível?
-- qual score o prompt atual faz antes de otimizar?
+- Does my `prompt.txt` render correctly?
+- Is my `benchmark.yaml` well formed?
+- Are the assertions evaluating what I expect?
+- Is `target_model` accessible?
+- What score does the current prompt achieve before optimization?
 
 ```bash
 uv run crucible validate \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-O comando roda uma única iteração, equivalente à `v0` de uma otimização. Ele:
+The command runs a single iteration, equivalent to the `v0` of an optimization. It:
 
-1. renderiza o prompt para cada caso;
-2. chama o `target_model`;
-3. aplica a assertion do caso;
-4. calcula score, pass rate, custo, tokens e latência;
-5. imprime uma tabela no terminal.
+1. renders the prompt for each case;
+2. Calls `target_model`;
+3. applies the assertion of the case;
+4. calculates score, pass rate, cost, tokens and latency;
+5. prints a table on the terminal.
 
-Ele não chama o `reasoning_model` para criar um novo prompt. Por isso é o comando
-certo para depurar setup antes de gastar com `optimize`.
+It does not call `reasoning_model` to create a new prompt. This is why it is the right command to
+debug setup before spending it on `optimize`.
 
 ## `optimize`
 
-Executa o loop completo de otimização.
+Run the complete optimization loop.
 
-Use `optimize` quando o setup já foi validado e você quer que o Crucible tente
-melhorar o prompt automaticamente. Diferente de `validate`, esse comando usa o
-`reasoning_model` para diagnosticar falhas e propor novas versões do prompt.
+Use `optimize` when the setup has already been validated and you want Crucible to try to improve the
+prompt automatically. Unlike `validate`, this command uses `reasoning_model` to diagnose failures
+and propose new versions of the prompt.
 
 ```bash
 uv run crucible optimize --config config.yaml
 ```
 
-Por padrão, `prompt.txt` e `gabarito.yaml` são carregados ao lado do `config.yaml`.
+By default, `prompt.txt` and `benchmark.yaml` are loaded next to `config.yaml`.
 
-Com caminhos explícitos:
+With explicit paths:
 
 ```bash
 uv run crucible optimize \
   --config config.yaml \
   --prompt prompt_v0.txt \
-  --gabarito regression.yaml
+  --benchmark regression.yaml
 ```
 
-O comando:
+The command:
 
-1. executa o prompt inicial;
-2. calcula score e métricas operacionais;
-3. constrói um contrato da tarefa a partir do prompt inicial, config e gabarito;
-4. seleciona falhas relevantes;
-5. pede um diagnóstico ao `reasoning_model`;
-6. pede uma proposta de novo prompt;
-7. valida a proposta contra o contrato da tarefa;
-8. se a proposta violar o contrato, pede reparos ao `reasoning_model` sem executar
-   o target de novo;
-9. executa a nova versão contra o gabarito somente quando o refino é válido;
-10. repete até algum critério de parada.
 
-O contrato da tarefa protege requisitos que não devem mudar durante a otimização.
-Exemplo: se o prompt ou o gabarito indicam que um campo deve conter o trecho literal
-que justifica uma classificação, o refino não pode trocar isso por uma justificativa
-inferida como "o texto contém prazo". Nesses casos, o gabarito é usado como fonte da
-verdade quando o prompt inicial é omisso.
+1. executes the initial prompt;
+2. calculates operational score and metrics;
+3. builds a task contract from the initial prompt, config and benchmark;
+4. selects relevant failures;
+5. asks for a diagnosis from `reasoning_model`;
+6. asks for a new prompt proposal;
+7. validates the proposal against the contract of the task;
+8. if the proposal violates the contract, ask the `reasoning_model` for repairs without running the
+   target again;
+9. executes the new version against benchmark only when refining is valid;
+10. repeats until a stopping criterion is met.
 
-Se o `reasoning_model` gerar um prompt inválido, o Crucible não cria uma nova
-iteração com o mesmo prompt. Ele envia as violações de volta ao reasoning e pede uma
-nova proposta, até `max_refinement_repair_attempts`. Se nenhuma tentativa produzir
-um prompt válido, a run encerra com `reasoning_failed_to_refine`.
+The task contract protects requirements that should not change during optimization. Example: if the
+prompt or benchmark indicates that a field should contain the literal snippet that justifies a
+classification, the refining cannot exchange this for an inferred justification as "the text
+contains term". In such cases, the benchmark is used as a source of truth when the initial prompt is
+silent.
 
-Durante uma run de `optimize`, o Crucible mantém uma sessão local de reasoning.
-Essa sessão é por run, não global. Ela registra diagnósticos, propostas, respostas
-brutas do reasoning, erros de parse e violações de contrato. Nas chamadas seguintes,
-o Crucible envia um resumo desse histórico ao `reasoning_model`, para que ele não
-repita tentativas rejeitadas e preserve decisões anteriores da mesma execução.
+If `reasoning_model` generates an invalid prompt, Crucible does not create a new iteration with the
+same prompt. It sends the violations back to the reasoning model and asks for a new proposal, up to
+`max_refinement_repair_attempts`. If no attempt produces a valid prompt, the run closes with
+`reasoning_failed_to_refine`.
 
-Critérios de parada:
+During a run of `optimize`, Crucible maintains a local reasoning session. This session is by run,
+not
+global. It records diagnostics, proposals, raw response from the reasoning model, parse errors and
+contract
+violations. In the following calls, Crucible sends a summary of this history to `reasoning_model`,
+so that it does not repeat rejected attempts and preserves previous decisions of the same execution.
 
-- `threshold_reached`: melhor score atingiu o threshold;
-- `max_iterations`: limite de iterações;
-- `budget_exhausted`: custo máximo atingido;
-- `time_exhausted`: tempo máximo atingido;
-- `plateau`: score parou de melhorar;
-- `no_failures`: não há falhas para refinar;
-- `cancelled`: task cancelada pela API;
-- `reasoning_failed_to_refine`: o modelo reasoning não conseguiu gerar uma proposta
-  de prompt que preservasse o contrato da tarefa.
+Stopping criteria:
 
-Ao terminar, a run fica salva em `.crucible/` e o melhor prompt pode ser visto com
-`show-run`, `report`, `diff`, `export` ou pelo dashboard.
+- `threshold_reached`: best score reached the threshold;
+- `max_iterations`: iteration limit;
+- `budget_exhausted`: maximum cost reached;
+- `time_exhausted`: maximum time reached;
+- `plateau`: score stopped improving;
+- `no_failures`: there are no flaws to refine;
+- `cancelled`: task cancelled by API;
+- `reasoning_failed_to_refine`: the reasoning model failed to generate a prompt proposal that
+  preserved the task contract.
+
+At the end, the run is saved in `.crucible/` and the best prompt can be seen with `show-run`,
+`report`, `diff`, `export` or the dashboard.
 
 ## `estimate-cost`
 
-Estima custo antes da execução.
+Estimates cost before execution.
 
 ```bash
 uv run crucible estimate-cost --config config.yaml
 ```
 
-Com caminhos explícitos:
+With explicit paths:
 
 ```bash
 uv run crucible estimate-cost \
   --config config.yaml \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml
+  --benchmark benchmark.yaml
 ```
 
 ## `list-runs`
 
-Lista runs recentes a partir do SQLite.
+List recent runs from SQLite.
 
 ```bash
 uv run crucible list-runs
@@ -180,7 +182,7 @@ uv run crucible list-runs --limit 50
 
 ## `show-run`
 
-Mostra um resumo JSON da run.
+Show a JSON run summary.
 
 ```bash
 uv run crucible show-run --run latest
@@ -189,7 +191,7 @@ uv run crucible show-run --run <run-id>
 
 ## `diff`
 
-Mostra diff entre versões de prompt.
+Show diff between prompt versions.
 
 ```bash
 uv run crucible diff --run latest --from 0 --to best
@@ -198,50 +200,48 @@ uv run crucible diff --run <run-id> --from 1 --to 3
 
 ## `compare-runs`
 
-Compara duas runs.
+Compare two runs.
 
 ```bash
 uv run crucible compare-runs <run-a> <run-b>
 ```
 
-Use quando você já tem duas execuções salvas e quer comparar o melhor score,
-quantidade de iterações, custo total e motivo de parada. Ele não chama nenhum
-provider; apenas lê runs existentes em `.crucible/`.
+Use it when you already have two saved executions and want to compare the best score, amount of
+iterations, total cost and stopping reason. It does not call any provider; it reads existing runs
+in `.crucible/`.
 
 ## `compare-models`
 
-Compara vários modelos alvo usando o mesmo prompt e o mesmo gabarito.
+Compares multiple target models using the same prompt and the same benchmark.
 
 ```bash
 uv run crucible compare-models \
   --prompt prompt.txt \
-  --gabarito gabarito.yaml \
+  --benchmark benchmark.yaml \
   --config config.yaml
 ```
 
-Use `compare-models` quando você quer escolher o melhor `target_model` antes de
-otimizar um prompt. O comando executa uma iteração por entrada de
-`comparison_models`, calcula score, pass rate, custo, latência e tokens cacheados, e
-salva uma run com `run_mode: compare`.
+Use `compare-models` when you want to choose the best `target_model` before optimizing a prompt. The
+command executes one iteration per entry in `comparison_models`, calculates score, pass rate, cost,
+latency and cached tokens, and saves a run with `run_mode: compare`.
 
-Para esse comando, `target_model` e `reasoning_model` podem ficar ausentes do
-`config.yaml`. O Crucible usa cada item de `comparison_models` como target
-temporário. Ao promover o vencedor para `validate` ou `optimize`, aí sim configure
-`target_model` e `reasoning_model`.
+For this command, `target_model` and `reasoning_model` may be missing from `config.yaml`. Crucible
+uses each item of `comparison_models` as a temporary target. When promoting the winner to `validate`
+or `optimize`, configure `target_model` and `reasoning_model`.
 
-O resultado mostra três vencedores:
+The result shows three winners:
 
-- melhor score: prioriza qualidade;
-- menor custo: prioriza custo total;
-- melhor custo-benefício: usa os pesos `comparison_value_*` do config.
+- Best score: prioritizes quality;
+- lower cost: prioritizes total cost;
+- Best value for money: uses the `comparison_value_*` weights of config.
 
-Ele não pede refino ao `reasoning_model`. A comparação é uma fotografia controlada:
-mesmo prompt, mesmos casos, um target por vez. Depois de escolher o modelo vencedor,
-rode `validate` ou `optimize` com esse modelo como `target_model`.
+It does not ask the `reasoning_model` for refinement. The comparison is a controlled snapshot: same
+prompt, same cases, one target at a time. After choosing the winning model, run `validate` or
+`optimize` with this model as `target_model`.
 
 ## `report`
 
-Gera relatório.
+Generates report.
 
 ```bash
 uv run crucible report --run latest --format html
@@ -249,11 +249,11 @@ uv run crucible report --run latest --format json
 uv run crucible report --run latest --format pdf
 ```
 
-Os arquivos são escritos em `.crucible/reports/`.
+The files are written in `.crucible/reports/`.
 
 ## `export`
 
-Exporta artefatos da run.
+Exports run artifacts.
 
 ```bash
 uv run crucible export --run latest --format prompt --output ./best_prompt.txt
@@ -262,47 +262,46 @@ uv run crucible export --run latest --format parquet --output ./verdicts.parquet
 uv run crucible export --run latest --format pdf --output ./report.pdf
 ```
 
-## `split-gabarito`
+## `split-benchmark`
 
-Cria arquivos determinísticos de train/val/test para inspeção ou execução manual.
+Create train/val/test deterministic files for manual inspection or execution.
 
 ```bash
-uv run crucible split-gabarito \
-  --gabarito gabarito.yaml \
+uv run crucible split-benchmark \
+  --benchmark benchmark.yaml \
   --output-dir ./splits \
   --train 0.7 \
   --val 0.15
 ```
 
-Esse comando materializa a mesma regra usada por `use_gabarito_split: true`: os casos
-são ordenados por `case.id`, depois cortados em train, val e test. Com 1000 casos,
-`--train 0.7 --val 0.15` gera 700/150/150.
+This command materializes the same rule used by `use_benchmark_split: true`: the cases are ordered
+by `case.id`, then cut into train, val and test. With 1000 cases, `--train 0.7 --val 0.15` generates
+700/150/150.
 
-Use o comando quando quiser revisar a divisão, versionar splits explícitos ou rodar
-validações separadas em CI. Para o fluxo normal de `optimize`, basta habilitar
-`use_gabarito_split` no config.
+Use the command when you want to review the split, edit explicit splits or run separate validations
+in CI. For normal flow of `optimize`, just enable `use_benchmark_split` in config.
 
-## `import-gabarito`
+## `import-benchmark`
 
-Converte formatos externos para o gabarito do Crucible.
+Convert external formats to the Crucible benchmark.
 
 ```bash
-uv run crucible import-gabarito --source jsonl --input cases.jsonl --output gabarito.yaml
-uv run crucible import-gabarito --source promptfoo --input promptfoo.yaml --output gabarito.yaml
-uv run crucible import-gabarito --source langsmith --input examples.json --output gabarito.yaml
-uv run crucible import-gabarito --source dspy --input examples.json --output gabarito.yaml
+uv run crucible import-benchmark --source jsonl --input cases.jsonl --output benchmark.yaml
+uv run crucible import-benchmark --source promptfoo --input promptfoo.yaml --output benchmark.yaml
+uv run crucible import-benchmark --source langsmith --input examples.json --output benchmark.yaml
+uv run crucible import-benchmark --source dspy --input examples.json --output benchmark.yaml
 ```
 
 ## `serve`
 
-Sobe o dashboard local.
+Starts the local dashboard.
 
 ```bash
 uv run crucible serve
 uv run crucible serve --host 0.0.0.0 --port 7777
 ```
 
-URL padrão:
+Default URL:
 
 ```text
 http://127.0.0.1:7777
@@ -310,10 +309,10 @@ http://127.0.0.1:7777
 
 ## `api`
 
-Sobe a REST API local.
+Starts the local REST API.
 
 ```bash
 uv run crucible api --port 7788
 ```
 
-O host padrão usa `CRUCIBLE_DASHBOARD_HOST` ou `127.0.0.1`.
+The default host uses `CRUCIBLE_DASHBOARD_HOST` or `127.0.0.1`.

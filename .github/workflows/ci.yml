@@ -32,14 +32,14 @@ jobs:
           uv run python - <<'PY'
           from pathlib import Path
           import yaml
-          from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt
+          from crucible.modules.optimizer.domain.models import Benchmark, OptimizationConfig, Prompt
 
           for path in sorted(Path("examples").glob("**/*.yaml")):
               data = yaml.safe_load(path.read_text())
               if path.name.startswith("config"):
                   OptimizationConfig.model_validate(data)
-              elif path.name == "gabarito.yaml":
-                  Gabarito.model_validate(data)
+              elif path.name.startswith("benchmark"):
+                  Benchmark.model_validate(data)
           for path in sorted(Path("examples").glob("**/prompt.txt")):
               Prompt.from_file(path)
           print("examples validate")

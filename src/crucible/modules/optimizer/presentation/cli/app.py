@@ -14,13 +14,13 @@ from rich.table import Table
 
 from crucible.core.logging import configure_logging
 from crucible.core.settings import get_settings
-from crucible.modules.optimizer.adapters.importers import import_gabarito
+from crucible.modules.optimizer.adapters.importers import import_benchmark
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.application.estimates import estimate_cost as estimate_cost_for
 from crucible.modules.optimizer.application.exports import export_run
 from crucible.modules.optimizer.application.optimizer import Optimizer
 from crucible.modules.optimizer.application.reports import write_report
-from crucible.modules.optimizer.domain.models import Gabarito, OptimizationConfig, Prompt
+from crucible.modules.optimizer.domain.models import Benchmark, OptimizationConfig, Prompt
 from crucible.modules.optimizer.plugins.registry import load_plugins
 from crucible.modules.optimizer.presentation.api.app import create_api_app
 from crucible.modules.optimizer.presentation.web.app import create_dashboard_app
@@ -41,10 +41,10 @@ def main() -> None:
 def init(path: Annotated[Path, typer.Argument(help="Project directory to initialize.")]) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / "prompt.txt").write_text(
-        "Responda ao input abaixo de forma objetiva.\n\nInput:\n{input}\n",
+        "Respond to the input below concisely.\n\nInput:\n{input}\n",
         encoding="utf-8",
     )
-    (path / "gabarito.yaml").write_text(
+    (path / "benchmark.yaml").write_text(
         yaml.safe_dump(
             {
                 "name": "sample",
@@ -52,7 +52,7 @@ def init(path: Annotated[Path, typer.Argument(help="Project directory to initial
                 "cases": [
                     {
                         "id": "case-001",
-                        "input": "Diga apenas: ok",
+                        "input": "Say only: ok",
                         "expected_output": "ok",
                         "assertion": {"type": "contains"},
                         "weight": 1.0,
@@ -96,11 +96,11 @@ def init(path: Annotated[Path, typer.Argument(help="Project directory to initial
 @app.command()
 def validate(
     prompt: Annotated[Path, typer.Option("--prompt", "-p")],
-    gabarito: Annotated[Path, typer.Option("--gabarito", "-g")],
+    benchmark: Annotated[Path, typer.Option("--benchmark", "-b")],
     config: Annotated[Path, typer.Option("--config", "-c")],
 ) -> None:
     iteration = asyncio.run(
-        Optimizer(_load_config(config)).validate(_load_prompt(prompt), _load_gabarito(gabarito))
+        Optimizer(_load_config(config)).validate(_load_prompt(prompt), _load_benchmark(benchmark))
     )
     _print_iterations([iteration])
 
@@ -109,14 +109,14 @@ def validate(
 def optimize(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    gabarito: Annotated[Path | None, typer.Option("--gabarito", "-g")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
 ) -> None:
     config_dir = config.parent
     prompt_path = prompt or config_dir / "prompt.txt"
-    gabarito_path = gabarito or config_dir / "gabarito.yaml"
+    benchmark_path = benchmark or config_dir / "benchmark.yaml"
     run = asyncio.run(
         Optimizer(_load_config(config)).optimize(
-            _load_prompt(prompt_path), _load_gabarito(gabarito_path)
+            _load_prompt(prompt_path), _load_benchmark(benchmark_path)
         )
     )
     _print_iterations(run.iterations)
@@ -183,15 +183,15 @@ def export(
     console.print(str(export_run(loaded, output, format)))
 
 
-@app.command("import-gabarito")
-def import_gabarito_command(
+@app.command("import-benchmark")
+def import_benchmark_command(
     source: Annotated[str, typer.Option("--source")],
     input_path: Annotated[Path, typer.Option("--input", "-i")],
     output: Annotated[Path, typer.Option("--output", "-o")],
 ) -> None:
-    gabarito = import_gabarito(input_path, source)
+    benchmark = import_benchmark(input_path, source)
     output.write_text(
-        yaml.safe_dump(gabarito.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
+        yaml.safe_dump(benchmark.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
     console.print(str(output))
@@ -275,16 +275,16 @@ def compare_runs(
 def compare_models(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    gabarito: Annotated[Path | None, typer.Option("--gabarito", "-g")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
 ) -> None:
     config_dir = config.parent
     loaded_config = _load_config(config)
     prompt_path = prompt or config_dir / "prompt.txt"
-    gabarito_path = gabarito or config_dir / "gabarito.yaml"
+    benchmark_path = benchmark or config_dir / "benchmark.yaml"
     run = asyncio.run(
         Optimizer(loaded_config).compare_models(
             _load_prompt(prompt_path),
-            _load_gabarito(gabarito_path),
+            _load_benchmark(benchmark_path),
         )
     )
     _print_comparison(run)
@@ -297,36 +297,36 @@ def compare_models(
 def estimate_cost(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    gabarito: Annotated[Path | None, typer.Option("--gabarito", "-g")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
 ) -> None:
     config_dir = config.parent
     loaded_config = _load_config(config)
     prompt_path = prompt or config_dir / "prompt.txt"
-    gabarito_path = gabarito or config_dir / "gabarito.yaml"
+    benchmark_path = benchmark or config_dir / "benchmark.yaml"
     estimate = estimate_cost_for(
         _load_prompt(prompt_path),
-        _load_gabarito(gabarito_path),
+        _load_benchmark(benchmark_path),
         loaded_config,
     )
     console.print_json(estimate.model_dump_json())
 
 
-@app.command("split-gabarito")
-def split_gabarito(
-    gabarito: Annotated[Path, typer.Option("--gabarito", "-g")],
+@app.command("split-benchmark")
+def split_benchmark(
+    benchmark: Annotated[Path, typer.Option("--benchmark", "-b")],
     output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
     train: Annotated[float, typer.Option("--train")] = 0.7,
     val: Annotated[float, typer.Option("--val")] = 0.15,
 ) -> None:
-    loaded = _load_gabarito(gabarito)
+    loaded = _load_benchmark(benchmark)
     train_set, val_set, test_set = loaded.split(train=train, val=val)
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, split in [("train", train_set), ("val", val_set), ("test", test_set)]:
-        (output_dir / f"gabarito.{name}.yaml").write_text(
+        (output_dir / f"benchmark.{name}.yaml").write_text(
             yaml.safe_dump(split.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
-    console.print(f"Wrote split gabaritos to {output_dir}")
+    console.print(f"Wrote split benchmarks to {output_dir}")
 
 
 @app.command()
@@ -357,10 +357,10 @@ def _load_prompt(path: Path) -> Prompt:
     return Prompt(template=template, variables=["input"] if "{input}" in template else [])
 
 
-def _load_gabarito(path: Path) -> Gabarito:
+def _load_benchmark(path: Path) -> Benchmark:
     if path.suffix.lower() == ".json":
-        return Gabarito.from_json(path)
-    return Gabarito.from_yaml(path)
+        return Benchmark.from_json(path)
+    return Benchmark.from_yaml(path)
 
 
 def _load_config(path: Path) -> OptimizationConfig:

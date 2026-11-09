@@ -1,27 +1,25 @@
 # Code Of Conduct
 
-Este projeto segue o Contributor Covenant, versão 2.1.
+This project follows Contributor Covenant, version 2.1.
 
-## Nosso Compromisso
+## Our Commitment
 
-Queremos uma comunidade aberta, respeitosa e profissional. Participantes devem tratar
-outras pessoas com respeito, independentemente de experiência, identidade, origem,
-idioma, localização ou contexto.
+We want an open, respectful and professional community. Participants should treat other people with
+respect regardless of experience, identity, origin, language, location or context.
 
-## Comportamento Esperado
+## Expected Behavior
 
-- Use linguagem acolhedora e objetiva.
-- Respeite opiniões técnicas diferentes.
-- Foque em fatos, trade-offs e impacto.
-- Aceite feedback construtivo.
-- Evite ataques pessoais, assédio ou exposição de dados privados.
+- Use warm and objective language.
+- Respect different technical opinions.
+- Focus on facts, trade-offs and impact.
+- Accept constructive feedback.
+- Avoid personal attacks, harassment or exposure of private data.
 
-## Aplicação
+## Enforcement
 
-Mantenedores podem remover comentários, fechar issues, bloquear interações ou banir
-participantes que violem este código.
+Maintainers can remove comments, close issues, block interactions, or ban participants who violate
+this code.
 
-## Contato
+## Contact
 
-Reporte incidentes aos mantenedores do repositório. Relatos serão tratados com
-discrição.
+Report incidents to repository maintainers. Reports will be handled with discretion.

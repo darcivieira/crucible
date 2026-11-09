@@ -9,7 +9,18 @@ from crucible.modules.optimizer.domain.models import (
 )
 
 
-def estimate_cost(prompt: Prompt, benchmark: Benchmark, config: OptimizationConfig) -> CostEstimate:
+def estimate_cost(
+    prompt: Prompt,
+    benchmark: Benchmark | None = None,
+    config: OptimizationConfig | None = None,
+    *,
+    gabarito: Benchmark | None = None,
+) -> CostEstimate:
+    if benchmark is not None and gabarito is not None and benchmark != gabarito:
+        raise ValueError("Conflicting benchmark arguments")
+    benchmark = benchmark if benchmark is not None else gabarito
+    if benchmark is None or config is None:
+        raise TypeError("benchmark and config are required")
     if config.target_model is None:
         raise ValueError("target_model is required for estimate-cost")
     if config.reasoning_model is None:

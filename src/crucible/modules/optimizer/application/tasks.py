@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.application.contracts import build_task_contract
@@ -18,7 +18,7 @@ from crucible.modules.optimizer.domain.models import (
 
 class RunTaskRequest(BaseModel):
     prompt: Prompt
-    benchmark: Benchmark
+    benchmark: Benchmark = Field(validation_alias=AliasChoices("benchmark", "gabarito"))
     config: OptimizationConfig
     mode: RunMode = "optimize"
 

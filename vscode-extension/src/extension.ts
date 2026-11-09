@@ -29,7 +29,7 @@ function runCrucible(action: "validate" | "optimize") {
   const commandPrefix = config.get<string>("command", "uv run crucible");
   const configPath = config.get<string>("configPath", "config.yaml");
   const promptPath = config.get<string>("promptPath", "prompt.txt");
-  const benchmarkPath = config.get<string>("benchmarkPath", "benchmark.yaml");
+  const benchmarkPath = resolveBenchmarkPath(config);
   const args =
     action === "validate"
       ? ["validate", "--prompt", promptPath, "--benchmark", benchmarkPath, "--config", configPath]
@@ -149,4 +149,10 @@ function relative(workspace: string, file: string): string {
 
 function splitCommand(command: string): string[] {
   return command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, "")) ?? [];
+}
+
+function resolveBenchmarkPath(config: vscode.WorkspaceConfiguration): string {
+  const current = config.inspect<string>("benchmarkPath");
+  const explicit = current?.workspaceFolderValue ?? current?.workspaceValue ?? current?.globalValue;
+  return explicit ?? config.get<string>("gabaritoPath") ?? config.get<string>("benchmarkPath", "benchmark.yaml");
 }

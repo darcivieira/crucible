@@ -534,3 +534,21 @@ Cost tracking depends on:
 
 Local providers have zero cost by default. Cloud providers also stay at zero cost until you declare
 prices in config.
+
+## Compatibility with Existing Projects
+
+English names are the documented defaults. Existing projects can continue using
+legacy SDK imports and keyword arguments, CLI flags/commands, benchmark filenames,
+API input fields, and split configuration keys. Existing JSON and SQLite run
+payloads are normalized when loaded; reading them does not rewrite user data.
+The legacy hash and split-setting keys remain available in serialized output.
+
+When both field names are present in configuration or input JSON, the English
+field takes precedence. The CLI resolves current and legacy benchmark filenames
+without duplicating files. Existing VSCode benchmark-path settings are honored
+unless an explicit English setting overrides them.
+
+Project-authored interface text and internal prompts are English. User tasks and
+expected labels are preserved in their original language; constraint matching
+continues to recognize English and Portuguese. Historical rule-source values are
+normalized to the current English value when loaded.

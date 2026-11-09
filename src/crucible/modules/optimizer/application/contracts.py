@@ -6,6 +6,11 @@ import re
 import unicodedata
 from typing import Any
 
+from crucible.modules.optimizer.application.language_support import (
+    EXTRACTION_TERMS,
+    INFERENCE_DRIFT_PATTERNS,
+    NO_INVENTION_TERMS,
+)
 from crucible.modules.optimizer.domain.models import (
     Benchmark,
     ContractRule,
@@ -16,33 +21,12 @@ from crucible.modules.optimizer.domain.models import (
     TaskContract,
 )
 
-_EXTRACTION_TERMS = (
-    "exact",
-    "literal",
-    "passage",
-    "extract",
-    "copy",
-    "transcribe",
-    "verbatim",
+_EXTRACTION_TERMS = tuple(term for terms in EXTRACTION_TERMS.values() for term in terms)
+_INFERENCE_DRIFT_PATTERNS = tuple(
+    term for terms in INFERENCE_DRIFT_PATTERNS.values() for term in terms
 )
-_INFERENCE_DRIFT_PATTERNS = (
-    "explain why",
-    "justify why",
-    "summarize why",
-    "infer the reason",
-)
-_NO_INVENTION_TERMS = (
-    "do not invent",
-    "don't invent",
-    "do not create information",
-    "do not include information that does not exist",
-    "use only information present",
-    "only information present",
-    "only on information present",
-    "do not infer missing data",
-    "do not assume unmentioned content",
-    "base your response only on the text",
-)
+_NO_INVENTION_TERMS = tuple(term for terms in NO_INVENTION_TERMS.values() for term in terms)
+_FUTURE_PATTERN = r"\b(?:future|futuros?)\b"
 
 
 def build_task_contract(
@@ -106,7 +90,7 @@ def build_task_contract(
                 source="prompt",
             )
         )
-    if re.search(r"\bfuture\b", prompt_text, flags=re.IGNORECASE):
+    if re.search(_FUTURE_PATTERN, prompt_text, flags=re.IGNORECASE):
         invariants.append(
             ContractRule(
                 text=(
@@ -119,7 +103,7 @@ def build_task_contract(
     if _has_empty_evidence_for_none(expected_objects):
         invariants.append(
             ContractRule(
-                text="When classification is None, keep the textual evidence field empty.",
+                text="Keep textual evidence empty for no-match classes shown in the benchmark.",
                 source="benchmark",
             )
         )
@@ -155,12 +139,18 @@ def validate_refinement_against_contract(
         if _contains_any(normalized, _INFERENCE_DRIFT_PATTERNS):
             violations.append("proposal replaces literal extraction with explanation/inference")
 
-    if any("Do not invent" in rule.text for rule in contract.negative_rules):
+    if any(
+        _contains_any(rule.text, ("do not invent", "nao inventar"))
+        for rule in contract.negative_rules
+    ):
         if not _contains_any(normalized, _NO_INVENTION_TERMS):
             violations.append("rule against inventing information was removed")
 
-    if any("future events" in rule.text for rule in contract.invariants):
-        if "future" not in normalized:
+    if any(
+        _contains_any(rule.text, ("future events", "eventos futuros"))
+        for rule in contract.invariants
+    ):
+        if not re.search(_FUTURE_PATTERN, normalized):
             violations.append("future-events restriction was removed")
 
     return violations
@@ -244,7 +234,7 @@ def _has_empty_evidence_for_none(values: list[dict[str, Any]]) -> bool:
     for value in values:
         classification = value.get("classification")
         evidence = value.get("text_validation")
-        if classification == "None" and evidence == "":
+        if classification in ("None", "Nenhum") and evidence == "":
             return True
     return False
 

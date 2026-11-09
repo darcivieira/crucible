@@ -58,3 +58,6 @@ Public versions are published by GitHub Release/tag `vX.Y.Z`.
 Use English for code identifiers, comments, docstrings, prompts, interface text,
 examples, tests, and documentation. Keep documentation and examples consistent with
 the public SDK, CLI, and API names.
+
+Legacy API identifiers and multilingual input-matching vocabulary may remain as
+compatibility data. Keep explanations and primary documentation in English.

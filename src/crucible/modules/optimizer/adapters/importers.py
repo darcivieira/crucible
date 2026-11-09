@@ -185,3 +185,7 @@ def _tags(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
     return [str(value)]
+
+
+# Deprecated import name for existing plugin integrations.
+import_gabarito = import_benchmark

@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from crucible.core.settings import get_settings
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
@@ -14,7 +14,7 @@ from crucible.modules.optimizer.domain.models import Benchmark, OptimizationConf
 
 class CreateRunRequest(BaseModel):
     prompt: Prompt
-    benchmark: Benchmark
+    benchmark: Benchmark = Field(validation_alias=AliasChoices("benchmark", "gabarito"))
     config: OptimizationConfig
     mode: RunMode = Field(default="optimize")
 

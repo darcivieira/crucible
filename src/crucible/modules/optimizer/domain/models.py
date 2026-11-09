@@ -10,7 +10,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from crucible.modules.optimizer.domain.assertions import Assertion
 
@@ -147,6 +147,10 @@ class Benchmark(BaseModel):
         )
 
 
+# Legacy SDK import retained while Benchmark is the canonical public name.
+Gabarito = Benchmark
+
+
 class ModelParams(BaseModel):
     temperature: float = 0.0
     max_tokens: int = 1024
@@ -259,6 +263,11 @@ class ContractRule(BaseModel):
     text: str
     source: TaskContractSource
     critical: bool = True
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_legacy_source(cls, value: Any) -> Any:
+        return "benchmark" if value == "gabarito" else value
 
 
 class TaskContract(BaseModel):
@@ -403,7 +412,10 @@ class OptimizationConfig(BaseModel):
     max_failures_for_refinement: int = 10
     max_refinement_repair_attempts: int = Field(default=5, ge=1)
     instability_std_threshold_ms: float = 250.0
-    use_benchmark_split: bool = False
+    use_benchmark_split: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("use_benchmark_split", "use_gabarito_split"),
+    )
     train_ratio: float = 0.7
     val_ratio: float = 0.15
     execution_backend: ExecutionBackendName = "local"
@@ -425,13 +437,23 @@ class OptimizationConfig(BaseModel):
     judge_models: list[ModelSpec] = Field(default_factory=list)
     embedding_model: ModelSpec | None = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def use_gabarito_split(self) -> bool:
+        """Deprecated SDK alias for the benchmark split setting."""
+        return self.use_benchmark_split
+
+    @use_gabarito_split.setter
+    def use_gabarito_split(self, value: bool) -> None:
+        self.use_benchmark_split = value
+
 
 class OptimizationRun(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
     run_mode: RunMode = "optimize"
     config: OptimizationConfig
     task_contract: TaskContract | None = None
-    benchmark_hash: str
+    benchmark_hash: str = Field(validation_alias=AliasChoices("benchmark_hash", "gabarito_hash"))
     initial_prompt_hash: str
     iterations: list[Iteration] = Field(default_factory=list)
     status: RunStatus = "running"
@@ -444,6 +466,16 @@ class OptimizationRun(BaseModel):
     active_learning_suggestions: list[ActiveLearningSuggestion] = Field(default_factory=list)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     ended_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def gabarito_hash(self) -> str:
+        """Deprecated SDK alias for the benchmark hash."""
+        return self.benchmark_hash
+
+    @gabarito_hash.setter
+    def gabarito_hash(self, value: str) -> None:
+        self.benchmark_hash = value
 
     @property
     def best_iteration(self) -> Iteration | None:

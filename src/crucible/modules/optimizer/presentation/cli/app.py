@@ -14,6 +14,7 @@ from rich.table import Table
 
 from crucible.core.logging import configure_logging
 from crucible.core.settings import get_settings
+from crucible.modules.optimizer.adapters.compatibility import resolve_benchmark_path
 from crucible.modules.optimizer.adapters.importers import import_benchmark
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore
 from crucible.modules.optimizer.application.estimates import estimate_cost as estimate_cost_for
@@ -96,7 +97,7 @@ def init(path: Annotated[Path, typer.Argument(help="Project directory to initial
 @app.command()
 def validate(
     prompt: Annotated[Path, typer.Option("--prompt", "-p")],
-    benchmark: Annotated[Path, typer.Option("--benchmark", "-b")],
+    benchmark: Annotated[Path, typer.Option("--benchmark", "-b", "--gabarito", "-g")],
     config: Annotated[Path, typer.Option("--config", "-c")],
 ) -> None:
     iteration = asyncio.run(
@@ -109,11 +110,11 @@ def validate(
 def optimize(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b", "--gabarito", "-g")] = None,
 ) -> None:
     config_dir = config.parent
     prompt_path = prompt or config_dir / "prompt.txt"
-    benchmark_path = benchmark or config_dir / "benchmark.yaml"
+    benchmark_path = benchmark or _default_benchmark_path(config_dir)
     run = asyncio.run(
         Optimizer(_load_config(config)).optimize(
             _load_prompt(prompt_path), _load_benchmark(benchmark_path)
@@ -275,12 +276,12 @@ def compare_runs(
 def compare_models(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b", "--gabarito", "-g")] = None,
 ) -> None:
     config_dir = config.parent
     loaded_config = _load_config(config)
     prompt_path = prompt or config_dir / "prompt.txt"
-    benchmark_path = benchmark or config_dir / "benchmark.yaml"
+    benchmark_path = benchmark or _default_benchmark_path(config_dir)
     run = asyncio.run(
         Optimizer(loaded_config).compare_models(
             _load_prompt(prompt_path),
@@ -297,12 +298,12 @@ def compare_models(
 def estimate_cost(
     config: Annotated[Path, typer.Option("--config", "-c")],
     prompt: Annotated[Path | None, typer.Option("--prompt", "-p")] = None,
-    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b")] = None,
+    benchmark: Annotated[Path | None, typer.Option("--benchmark", "-b", "--gabarito", "-g")] = None,
 ) -> None:
     config_dir = config.parent
     loaded_config = _load_config(config)
     prompt_path = prompt or config_dir / "prompt.txt"
-    benchmark_path = benchmark or config_dir / "benchmark.yaml"
+    benchmark_path = benchmark or _default_benchmark_path(config_dir)
     estimate = estimate_cost_for(
         _load_prompt(prompt_path),
         _load_benchmark(benchmark_path),
@@ -313,7 +314,8 @@ def estimate_cost(
 
 @app.command("split-benchmark")
 def split_benchmark(
-    benchmark: Annotated[Path, typer.Option("--benchmark", "-b")],
+    ctx: typer.Context,
+    benchmark: Annotated[Path, typer.Option("--benchmark", "-b", "--gabarito", "-g")],
     output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
     train: Annotated[float, typer.Option("--train")] = 0.7,
     val: Annotated[float, typer.Option("--val")] = 0.15,
@@ -321,8 +323,9 @@ def split_benchmark(
     loaded = _load_benchmark(benchmark)
     train_set, val_set, test_set = loaded.split(train=train, val=val)
     output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = "gabarito" if ctx.info_name == "split-gabarito" else "benchmark"
     for name, split in [("train", train_set), ("val", val_set), ("test", test_set)]:
-        (output_dir / f"benchmark.{name}.yaml").write_text(
+        (output_dir / f"{prefix}.{name}.yaml").write_text(
             yaml.safe_dump(split.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
@@ -357,7 +360,12 @@ def _load_prompt(path: Path) -> Prompt:
     return Prompt(template=template, variables=["input"] if "{input}" in template else [])
 
 
+def _default_benchmark_path(directory: Path) -> Path:
+    return resolve_benchmark_path(directory / "benchmark.yaml")
+
+
 def _load_benchmark(path: Path) -> Benchmark:
+    path = resolve_benchmark_path(path)
     if path.suffix.lower() == ".json":
         return Benchmark.from_json(path)
     return Benchmark.from_yaml(path)
@@ -415,3 +423,8 @@ def _print_comparison(run) -> None:
             f"cost={run.comparison_summary.lowest_cost.label}, "
             f"value={run.comparison_summary.best_value.label}"
         )
+
+
+# Hidden command aliases keep existing scripts working with English defaults.
+app.command("import-gabarito", hidden=True)(import_benchmark_command)
+app.command("split-gabarito", hidden=True)(split_benchmark)

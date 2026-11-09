@@ -17,6 +17,7 @@ from jinja2 import DictLoader, Environment, select_autoescape
 from pydantic import ValidationError
 
 from crucible.core.settings import get_settings
+from crucible.modules.optimizer.adapters.compatibility import resolve_benchmark_path
 from crucible.modules.optimizer.adapters.storage import SQLiteRunStore, TaskRecord
 from crucible.modules.optimizer.application.reports import write_report
 from crucible.modules.optimizer.application.tasks import (
@@ -307,6 +308,11 @@ async def _form_values(request: Request) -> dict[str, str]:
 
 
 def _run_request_from_form(values: Mapping[str, str]) -> RunTaskRequest:
+    values = dict(values)
+    for suffix in ("content", "path"):
+        key = f"benchmark_{suffix}"
+        if not values.get(key):
+            values[key] = values.get(f"gabarito_{suffix}", "")
     mode = values.get("mode", "optimize")
     if mode not in {"validate", "optimize", "compare"}:
         raise ValueError("Mode must be validate, optimize, or compare.")
@@ -327,7 +333,10 @@ def _read_value(values: Mapping[str, str], name: str) -> str:
         return content
     path_value = values.get(f"{name}_path", "").strip()
     if path_value:
-        return Path(path_value).read_text(encoding="utf-8")
+        path = Path(path_value)
+        if name == "benchmark":
+            path = resolve_benchmark_path(path)
+        return path.read_text(encoding="utf-8")
     raise ValueError(f"Provide the content or path for {name}.")
 
 

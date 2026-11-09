@@ -13,7 +13,9 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [
     "onCommand:crucible.validate",
     "onCommand:crucible.optimize",
@@ -73,6 +75,11 @@
           "type": "string",
           "default": "benchmark.yaml",
           "description": "Path to benchmark file relative to the workspace root."
+        },
+        "crucible.gabaritoPath": {
+          "type": "string",
+          "description": "Legacy benchmark path relative to the workspace root.",
+          "deprecationMessage": "Use crucible.benchmarkPath. Existing values remain supported."
         }
       }
     }

@@ -26,6 +26,8 @@ versioning once the first public release is tagged.
 - Standardized code, comments, internal prompts, interface text, examples, and all
   documentation on English.
 - Renamed the public benchmark model, SDK arguments, CLI commands/options, API
-  fields, configuration keys, and example files to English names. This is a
-  breaking change: existing integrations, configuration files, and saved run
-  payloads must be updated before use. No automatic data migration is included.
+  fields, configuration keys, and example files to English names. Retained legacy
+  SDK imports/keywords, CLI options/commands, input fields, and output keys for
+  compatibility. Existing saved runs load without manual migration.
+- Preserved matching for Portuguese task constraints and instructed refinement
+  models to preserve the user's task language and expected output labels.

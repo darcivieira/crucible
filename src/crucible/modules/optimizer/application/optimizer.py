@@ -120,7 +120,14 @@ class Optimizer:
     def provider_cache_warnings(self) -> list[str]:
         return list(self._provider_cache_warnings)
 
-    async def validate(self, prompt: Prompt, benchmark: Benchmark) -> Iteration:
+    async def validate(
+        self,
+        prompt: Prompt,
+        benchmark: Benchmark | None = None,
+        *,
+        gabarito: Benchmark | None = None,
+    ) -> Iteration:
+        benchmark = _resolve_benchmark(benchmark, gabarito)
         self._require_validate_dependencies("validate")
         return await self._run_iteration(
             version=0,
@@ -131,7 +138,14 @@ class Optimizer:
             proposal=None,
         )
 
-    async def compare_models(self, prompt: Prompt, benchmark: Benchmark) -> OptimizationRun:
+    async def compare_models(
+        self,
+        prompt: Prompt,
+        benchmark: Benchmark | None = None,
+        *,
+        gabarito: Benchmark | None = None,
+    ) -> OptimizationRun:
+        benchmark = _resolve_benchmark(benchmark, gabarito)
         if not self.config.comparison_models:
             raise ValueError("comparison_models must contain at least one model")
         started_at = datetime.now(UTC)
@@ -187,7 +201,14 @@ class Optimizer:
         await self.store.save_run(run)
         return run
 
-    def estimate_cost(self, prompt: Prompt, benchmark: Benchmark):
+    def estimate_cost(
+        self,
+        prompt: Prompt,
+        benchmark: Benchmark | None = None,
+        *,
+        gabarito: Benchmark | None = None,
+    ):
+        benchmark = _resolve_benchmark(benchmark, gabarito)
         self._require_validate_dependencies("estimate-cost")
         return estimate_cost(prompt, benchmark, self.config)
 
@@ -201,7 +222,14 @@ class Optimizer:
         run = await self.load_run(run_id)
         return write_report(run, reports_dir or settings.reports_dir, format)
 
-    async def optimize(self, prompt: Prompt, benchmark: Benchmark) -> OptimizationRun:
+    async def optimize(
+        self,
+        prompt: Prompt,
+        benchmark: Benchmark | None = None,
+        *,
+        gabarito: Benchmark | None = None,
+    ) -> OptimizationRun:
+        benchmark = _resolve_benchmark(benchmark, gabarito)
         self._require_validate_dependencies("optimize")
         if self.config.use_benchmark_split:
             train_set, val_set, test_set = benchmark.split(
@@ -1339,7 +1367,8 @@ def _refinement_prompt(
         "Return strict JSON with new_prompt, diff_summary, rationale, "
         "expected_improvement, preserved_invariants, changed_behavior, "
         "risk_of_regression, and confidence. "
-        "Keep all required variables in the new prompt."
+        "Keep all required variables in the new prompt. "
+        "Preserve the task language and the expected output labels from the benchmark."
     )
 
 
@@ -1387,6 +1416,7 @@ def _repair_refinement_prompt(
         f"HISTORY: {[item.model_dump() for item in history]}\n\n"
         f"REASONING SESSION HISTORY:\n{reasoning_context}\n\n"
         f"FAILING CASES MOTIVATING REPAIR:\n{cases}\n\n"
+        "Preserve the task language and expected output labels. "
         "Correct each violation specifically. Preserve output fields, variables, "
         "negative constraints, literal extraction rules, and the benchmark as the source of truth. "
         "If text_validation represents a passage, keep verbatim extraction from the input; "
@@ -1396,3 +1426,12 @@ def _repair_refinement_prompt(
         "expected_improvement, preserved_invariants, changed_behavior, "
         "risk_of_regression, and confidence."
     )
+
+
+def _resolve_benchmark(benchmark: Benchmark | None, legacy: Benchmark | None) -> Benchmark:
+    if benchmark is not None and legacy is not None and benchmark != legacy:
+        raise ValueError("Conflicting benchmark arguments")
+    value = benchmark if benchmark is not None else legacy
+    if value is None:
+        raise TypeError("benchmark is required")
+    return value

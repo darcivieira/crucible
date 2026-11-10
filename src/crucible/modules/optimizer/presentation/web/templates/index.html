@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon, status_badge %}
+{% set page_label = 'Experiments' %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Evaluation workspace</div><h1>Experiments</h1><p class="page-description">Track prompt quality, compare models, and find your best result.</p></div>
+  <div class="actions"><a class="button secondary" href="{{ request.url }}">{{ icon('refresh', 14) }}Refresh</a><a class="button" href="/runs/new">{{ icon('plus', 15) }}New run</a></div>
+</div>
+<nav class="section-tabs" aria-label="Experiment modes">
+  <a href="/" {% if not filters.mode %}aria-current="page"{% endif %}>All runs <span class="tab-count">{{ summary.total }}</span></a>
+  <a href="/?mode=optimize" {% if filters.mode == 'optimize' %}aria-current="page"{% endif %}>Optimizations</a>
+  <a href="/?mode=validate" {% if filters.mode == 'validate' %}aria-current="page"{% endif %}>Validations</a>
+  <a href="/?mode=compare" {% if filters.mode == 'compare' %}aria-current="page"{% endif %}>Model comparisons</a>
+</nav>
+<section class="metrics" aria-label="Workspace summary">
+  <div class="metric">{{ icon('flask', 17) }}<span>Total runs</span><strong>{{ summary.total }}</strong><small>In your local history</small></div>
+  <div class="metric">{{ icon('check', 17) }}<span>Completed</span><strong>{{ summary.completed }}</strong><small>{{ summary.running }} currently in progress</small></div>
+  <div class="metric">{{ icon('chart', 17) }}<span>Best quality score</span><strong>{{ summary.best_score|score }}</strong><small>Across your recent runs · out of 100</small></div>
+  <div class="metric">{{ icon('dollar', 17) }}<span>Total cost</span><strong>{{ summary.total_cost|money }}</strong><small>Reported model usage</small></div>
+</section>
+<section class="table-card" aria-labelledby="run-history-title">
+  <div class="panel-title"><div><h2 id="run-history-title">Run history</h2><p>Every evaluation, from your first prompt to your best version.</p></div><div class="actions">{% if runs|length > 1 %}<a class="button secondary small" href="/compare?left={{ runs[1].id }}&amp;right={{ runs[0].id }}">{{ icon('compare', 13) }}Compare saved runs</a>{% endif %}<span class="badge">{{ runs|length }} shown</span></div></div>
+  <form method="get" class="filters" aria-label="Filter run history">
+    {% if filters.mode %}<input type="hidden" name="mode" value="{{ filters.mode }}">{% endif %}
+    <div class="filter-field"><label for="target-filter">Model</label><div class="input-icon">{{ icon('search', 15) }}<input id="target-filter" name="target" placeholder="Search provider or model" value="{{ filters.target }}"></div></div>
+    <div class="filter-field"><label for="status-filter">Status</label><select id="status-filter" name="status"><option value="">All statuses</option>{% for value in ['running', 'completed', 'failed', 'aborted'] %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ value|capitalize }}</option>{% endfor %}</select></div>
+    <div class="filter-field"><label for="score-filter">Minimum score</label><input id="score-filter" name="min_score" type="number" step="0.1" min="0" max="100" placeholder="Any score" value="{{ filters.min_score if filters.min_score is not none else '' }}"></div>
+    <div class="actions"><button type="submit">{{ icon('filter', 14) }}Apply filters</button>{% if filters.status or filters.target or filters.min_score is not none %}<a class="button text" href="{% if filters.mode %}/?mode={{ filters.mode }}{% else %}/{% endif %}">Reset</a>{% endif %}</div>
+  </form>
+  {% if runs %}
+  <div class="table-scroll" role="region" aria-label="Experiment results" tabindex="0">
+    <table class="run-table">
+      <thead><tr><th scope="col">Experiment</th><th scope="col">Mode</th><th scope="col">Target model</th><th scope="col">Best score</th><th scope="col">Cost</th><th scope="col">Status</th><th scope="col">Started</th><th scope="col"><span class="sr-only">Open run</span></th></tr></thead>
+      <tbody>{% for run in runs %}<tr>
+        <td><a class="run-link" href="/runs/{{ run.id }}"><span class="run-symbol">{{ icon('flask', 15) }}</span><span><span class="cell-title mono" title="{{ run.id }}">{{ run.id[:12] }}</span><span class="cell-subtitle">{{ run.iterations_count }} {{ 'version' if run.iterations_count == 1 else 'versions' }}{% if run.best_version is not none %} · best v{{ run.best_version }}{% endif %}</span></span></a></td>
+        <td><span class="mode-label">{{ run.run_mode|mode_label }}</span></td>
+        <td><span class="model-name" title="{{ run.target_model }}">{{ run.target_model or 'Not set' }}</span><span class="cell-subtitle">{{ run.stop_reason|stop_label }}</span></td>
+        <td class="score-cell"><strong>{{ run.best_score|score }}</strong>{% if run.best_score is not none %} <small>/ 100</small><div class="mini-track" aria-hidden="true"><span style="width: {{ run.best_score }}%"></span></div>{% endif %}</td>
+        <td class="mono">{{ run.total_cost_usd|money }}</td><td>{{ status_badge(run.status) }}</td><td><span class="cell-title">{{ run.started_at[:10] }}</span><span class="cell-subtitle">{{ run.started_at[11:16] }}</span></td>
+        <td><a class="cell-action" href="/runs/{{ run.id }}" aria-label="Open run {{ run.id }}">{{ icon('chevron', 14) }}</a></td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><div class="empty-symbol">{{ icon('flask', 25) }}</div>
+    {% if summary.total %}<h2>No runs match these filters</h2><p>Try another model, status, or minimum score to find the run you need.</p><a href="/" class="button secondary">Clear all filters</a>
+    {% else %}<h2>Your first experiment starts here</h2><p>Create a run to evaluate a prompt, optimize it, or compare models against your benchmark.</p><a href="/runs/new" class="button">{{ icon('plus', 14) }}Create your first run</a>{% endif %}
+  </div>
+  {% endif %}
+  <div class="table-footer"><span>Showing <strong>{{ runs|length }}</strong> of <strong>{{ summary.total }}</strong> recent runs</span><span>Stored locally · newest first</span></div>
+</section>
+{% endblock %}

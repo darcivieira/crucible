@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon, run_tabs %}
+{% set is_regressions = version == 'regressions' %}
+{% set page_label = 'Regressions' if is_regressions else 'Verdicts ' ~ version %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Case explorer · {{ run.id[:12] }}</div><h1>{{ 'Regressions' if is_regressions else 'Verdicts ' ~ version }}</h1><p class="page-description">Inspect the inputs, expected answers, and model outputs behind each score.</p></div><a class="button secondary" href="/runs/{{ run.id }}">Back to scorecard</a></div>
+{{ run_tabs(run, 'regressions' if is_regressions else 'verdicts') }}
+{% if iteration is defined %}<section class="panel prompt-panel"><div class="panel-title"><div><h2>Prompt used</h2><p>The v{{ iteration.version }} prompt used for the cases below. The {input} placeholder is filled separately for each case.</p></div><button class="secondary small" type="button" data-copy-target="iteration-prompt">{{ icon('copy', 13) }}<span data-copy-label>Copy prompt</span></button></div><pre id="iteration-prompt">{{ iteration.prompt.template }}</pre></section>{% endif %}
+<section class="table-card"><div class="panel-title"><div><h2>{{ 'Regressing cases' if is_regressions else 'Case results' }}</h2><p>Expand a case to inspect its full result.</p></div><span class="badge">{{ verdicts|length }} results</span></div>
+<form method="get" class="filters verdict-filters" aria-label="Filter case results">
+  <div><label for="case-filter">Case</label><input id="case-filter" name="case_id" placeholder="Search case ID" value="{{ filters.case_id or '' }}"></div>
+  <div><label for="passed-filter">Result</label><select id="passed-filter" name="passed"><option value="">All results</option><option value="true" {% if filters.passed == 'true' %}selected{% endif %}>Passed</option><option value="false" {% if filters.passed == 'false' %}selected{% endif %}>Failed</option></select></div>
+  <div><label for="regression-filter">Regression</label><select id="regression-filter" name="regression"><option value="">All cases</option><option value="true" {% if filters.regression == 'true' %}selected{% endif %}>Regressions only</option><option value="false" {% if filters.regression == 'false' %}selected{% endif %}>No regression</option></select></div>
+  <div><label for="tag-filter">Tag</label><input id="tag-filter" name="tag" placeholder="Any tag" value="{{ filters.tag or '' }}"></div>
+  <div><label for="assertion-filter">Assertion</label><input id="assertion-filter" name="assertion_type" placeholder="Any assertion" value="{{ filters.assertion_type or '' }}"></div>
+  <div><label for="min-case-score">Minimum score</label><input id="min-case-score" name="min_score" type="number" min="0" max="1" step="0.01" value="{{ filters.min_score if filters.min_score is defined and filters.min_score is not none else '' }}"></div>
+  <div><label for="max-case-score">Maximum score</label><input id="max-case-score" name="max_score" type="number" min="0" max="1" step="0.01" value="{{ filters.max_score if filters.max_score is defined and filters.max_score is not none else '' }}"></div>
+  <div class="actions"><button type="submit">{{ icon('filter', 14) }}Filter cases</button></div>
+</form>
+{% if verdicts %}<div class="table-scroll" role="region" aria-label="Case verdicts" tabindex="0"><table class="model-table"><thead><tr><th>Case</th><th>Score</th><th>Result</th><th>Regression</th><th>Assertion</th><th>Latency</th><th>Tags</th></tr></thead><tbody>{% for verdict in verdicts %}<tr>
+<td><details><summary class="mono">{{ verdict.test_case.id }}</summary><h3>Input</h3><pre>{{ verdict.test_case.input }}</pre><h3>Expected</h3><pre>{{ verdict.test_case.expected_output }}</pre><h3>Actual</h3><pre>{{ verdict.execution.actual_output }}</pre><h3>Assertion detail</h3><pre>{{ verdict.assertion_detail|pretty_json }}</pre></details></td><td>{{ verdict.score|score }}</td><td><span class="badge {{ 'ok' if verdict.passed else 'bad' }}">{{ 'Passed' if verdict.passed else 'Failed' }}</span></td><td>{{ 'Yes' if verdict.is_regression else 'No' }}</td><td class="mono">{{ verdict.test_case.assertion.type }}</td><td>{{ '%.0f ms'|format(verdict.execution.latency_ms) }}</td><td>{{ verdict.test_case.tags|join(', ') or '—' }}</td>
+</tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state compact"><div class="empty-symbol">{{ icon('check' if is_regressions else 'search', 23) }}</div><h2>No verdicts found</h2><p>{{ 'No cases are marked as regressions in this run.' if is_regressions and not request.url.query else 'Adjust the filters to see more cases.' }}</p></div>{% endif %}
+</section>
+{% endblock %}

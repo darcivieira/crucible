@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon %}
+{% set page_label = 'New run' %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Create an experiment</div><h1>New run</h1><p class="page-description">Bring your prompt and benchmark. Choose what you want to measure.</p></div><a class="button secondary" href="/">Back to experiments</a></div>
+{% for error in errors %}<div class="error" role="alert">{{ error }}</div>{% endfor %}
+<form method="post">
+  <section class="panel"><h2 class="form-section-title"><span>1</span>Choose an evaluation mode</h2><div class="grid-3">
+    <div><label for="mode">Run mode</label><select id="mode" name="mode"><option value="optimize" {% if values.mode == 'optimize' %}selected{% endif %}>Optimize</option><option value="validate" {% if values.mode == 'validate' %}selected{% endif %}>Validate</option><option value="compare" {% if values.mode == 'compare' %}selected{% endif %}>Compare models</option></select><p class="help">Validate measures your current prompt. Optimize creates better versions. Compare evaluates each model in comparison_models.</p></div>
+    <div><label for="prompt-path">Prompt path</label><input id="prompt-path" name="prompt_path" value="{{ values.prompt_path }}"><p class="help">A file available to this local workspace.</p></div>
+    <div><label for="benchmark-path">Benchmark path</label><input id="benchmark-path" name="benchmark_path" value="{{ values.benchmark_path }}"><p class="help">Your test cases and expected answers.</p></div>
+  </div></section>
+  <section class="panel"><h2 class="form-section-title"><span>2</span>Set the prompt and benchmark</h2><div class="grid-2">
+    <div><label for="prompt-content">Prompt</label><textarea id="prompt-content" name="prompt_content" spellcheck="false">{{ values.prompt_content }}</textarea><p class="help">Pasted content takes precedence over the file path. Use {input} for the text of each case.</p></div>
+    <div><label for="benchmark-content">Benchmark YAML or JSON</label><textarea id="benchmark-content" name="benchmark_content" spellcheck="false">{{ values.benchmark_content }}</textarea><p class="help">Define cases, expected_output, assertions, weights, and tags.</p></div>
+  </div></section>
+  <section class="panel"><h2 class="form-section-title"><span>3</span>Configure models and limits</h2><div class="grid-2"><div><label for="config-path">Config path</label><input id="config-path" name="config_path" value="{{ values.config_path }}"></div><div><label for="config-content">Configuration YAML</label><p class="help">Set your models, budgets, output format, rate limits, and evaluation options.</p></div></div><div style="margin-top:15px"><textarea id="config-content" name="config_content" spellcheck="false">{{ values.config_content }}</textarea></div></section>
+  <details class="panel config-reference"><summary>Understand the evaluation settings</summary><div class="grid-3"><p><strong>threshold</strong>Global stopping score, from 0 to 100.</p><p><strong>max_iterations</strong>Maximum versions, including the original v0.</p><p><strong>output_format</strong>The output contract requested from the provider.</p><p><strong>use_benchmark_split</strong>Separate train, validation, and test cases to reduce overfitting.</p><p><strong>rate_limit</strong>Concurrency and retries for each model.</p><p><strong>field_by_field.weights</strong>Field weights belong in the benchmark assertion.</p></div></details>
+  <div class="form-actions"><p>Your run and results will be saved in the local workspace.</p><div class="actions"><a class="button secondary" href="/">Cancel</a><button type="submit">{{ icon('flask', 14) }}Start run</button></div></div>
+</form>
+{% endblock %}

@@ -101,7 +101,6 @@ Maintain explicit request/response models. Durable state must pass through the s
 - SQLite doesn't have a migration system yet.
 - Contract tests from providers use mocks, not actual smoke tests.
 - Importers cover common formats, not all upstream variations.
-- Dashboard templates are embedded in Python for packaging simplicity.
 
 ## Release Checklist
 

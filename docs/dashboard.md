@@ -198,3 +198,25 @@ trusted internal network use.
 
 When you provide local paths in the form, the dashboard process reads these files in the filesystem
 of the machine where `crucible serve` is running. Do not expose the dashboard on public network.
+
+## Scorecard Workspace
+
+The dashboard uses a light workspace with persistent sidebar navigation, run-mode
+filters, compact history tables, and a scorecard for the selected result. The
+interface adapts to narrow screens; wide metric tables scroll inside their panels.
+
+The run scorecard compares the first and selected versions using recorded quality,
+pass rate, per-version cost, and p95 latency. Bars show the direction and relative
+size of the observed change. They are not confidence intervals. Positive quality
+changes and reduced cost/latency are marked as improvements; opposite changes are
+shown as trade-offs. Empty runs display a waiting state rather than invented data.
+
+Use **Compare saved runs** in the history table to compare two selected results.
+The comparison screen lets you change either run and identifies different benchmark
+versions. Prompt diffs, case inspection, regression filters, reports, and JSON
+exports remain available from the scorecard. Prompt panels include a copy action
+with a text-selection fallback when clipboard access is unavailable.
+
+Templates live in `presentation/web/templates/`; local CSS, JavaScript, and the
+favicon live in `presentation/web/static/`. These assets are included in the Python
+package and served locally. No external font or chart service is required.

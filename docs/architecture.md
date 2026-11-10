@@ -90,6 +90,8 @@ Files:
 
 - `presentation/cli/app.py`
 - `presentation/web/app.py`
+- `presentation/web/templates/*`
+- `presentation/web/static/*`
 - `presentation/api/app.py`
 
 Responsibilities:

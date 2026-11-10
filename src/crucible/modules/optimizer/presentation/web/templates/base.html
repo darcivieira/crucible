@@ -1,0 +1,50 @@
+{% from '_components.html' import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#205781">
+  <link rel="icon" type="image/svg+xml" href="{{ request.url_for('static', path='favicon.svg') }}">
+  <title>{% block title %}{{ page_label or 'Experiments' }} · Crucible{% endblock %}</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='dashboard.css') }}">
+  <script src="{{ request.url_for('static', path='dashboard.js') }}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <aside class="sidebar" aria-label="Workspace navigation">
+    <a class="brand" href="/" aria-label="Crucible home">
+      <svg width="31" height="34" viewBox="0 0 32 36" aria-hidden="true"><path d="M16 1 30 9v18l-14 8L2 27V9Z" fill="currentColor"/><path d="M13 10h6m-5 0v6l-5 9h14l-5-9v-6m-6 11h8" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>CRUCIBLE</span>
+    </a>
+    <div class="workspace-chip">{{ icon('folder') }}<span>Prompt workspace</span><span class="workspace-local">LOCAL</span></div>
+    <div class="nav-heading">Workspace</div>
+    <nav class="primary-nav" aria-label="Main navigation">
+      <a href="/" class="nav-link {% if request.url.path == '/' or request.url.path.startswith('/runs/') and request.url.path != '/runs/new' or request.url.path == '/compare' %}is-active{% endif %}" {% if request.url.path == '/' %}aria-current="page"{% endif %}>{{ icon('flask') }}<span>Experiments</span></a>
+      <a href="/runs/new" class="nav-link {% if request.url.path == '/runs/new' %}is-active{% endif %}" {% if request.url.path == '/runs/new' %}aria-current="page"{% endif %}>{{ icon('plus') }}<span>Create a run</span></a>
+      <a href="/docs" class="nav-link" target="_blank" rel="noopener">{{ icon('code') }}<span>API reference</span>{{ icon('external', 13) }}</a>
+    </nav>
+    {% if run is defined %}
+    <div class="run-navigation">
+      <div class="nav-heading">Current experiment</div>
+      <a class="nav-link" href="/runs/{{ run.id }}">{{ icon('chart') }}<span>Evaluation scorecard</span></a>
+      {% if run.iterations %}<a class="nav-link" href="/runs/{{ run.id }}/iterations/{{ run.best_iteration.version }}/verdicts">{{ icon('layers') }}<span>Inspect cases</span></a>{% endif %}
+      <a class="nav-link" href="/runs/{{ run.id }}/regressions">{{ icon('alert') }}<span>Regressions</span></a>
+    </div>
+    {% endif %}
+    <div class="sidebar-bottom">
+      <div class="workspace-note">{{ icon('info', 16) }}<p>Benchmark-driven evaluation.<br><span>Prompts, models, and run history.</span></p></div>
+      <div class="sidebar-profile"><span class="profile-mark">C</span><div><strong>Local workspace</strong><span>Crucible · v0.1.0</span></div><span class="connection-dot" title="Local workspace"></span></div>
+    </div>
+  </aside>
+  <div class="workspace-main">
+    <header class="topbar">
+      <div class="breadcrumbs"><span>Workspace</span>{{ icon('chevron', 12) }}<a href="/">Experiments</a>{% if page_label is defined and page_label != 'Experiments' %}{{ icon('chevron', 12) }}<span class="crumb-current">{{ page_label }}</span>{% endif %}</div>
+      <div class="topbar-end"><span class="local-indicator"><span class="connection-dot"></span>Local workspace</span><a class="help-link" href="/docs" target="_blank" rel="noopener" aria-label="Open API reference in a new tab">{{ icon('info', 18) }}</a></div>
+    </header>
+    <main id="main-content" class="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
+    <footer class="page-footer"><span>Crucible / Prompt evaluation workspace</span><a href="/docs" target="_blank" rel="noopener">API reference</a></footer>
+  </div>
+  <div class="sr-only" aria-live="polite" id="copy-status"></div>
+</body>
+</html>

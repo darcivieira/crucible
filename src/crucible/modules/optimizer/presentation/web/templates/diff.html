@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon, run_tabs %}
+{% set page_label = 'Prompt diff' %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Prompt versions · {{ run.id[:12] }}</div><h1>Prompt diff</h1><p class="page-description">See exactly what changed between two versions.</p></div><a class="button secondary" href="/runs/{{ run.id }}">Back to scorecard</a></div>
+{{ run_tabs(run, 'diff') }}
+<section class="table-card"><div class="panel-title"><div><h2>Changes from v{{ left.version }} to v{{ right.version }}</h2><p>Removed and added lines show how the prompt evolved.</p></div></div>
+<form method="get" class="filters diff-filters"><div><label for="from-version">Baseline version</label><select id="from-version" name="from_version">{% for iteration in run.iterations %}<option value="{{ loop.index0 }}" {% if iteration.version == left.version %}selected{% endif %}>v{{ iteration.version }}</option>{% endfor %}</select></div><div><label for="to-version">Compare with</label><select id="to-version" name="to_version"><option value="best">Best prompt</option>{% for iteration in run.iterations %}<option value="{{ loop.index0 }}" {% if iteration.version == right.version %}selected{% endif %}>v{{ iteration.version }}</option>{% endfor %}</select></div><div class="actions"><button type="submit">{{ icon('compare', 14) }}Update comparison</button></div></form>
+<div class="panel" style="border:0;margin:0"><pre class="diff-view">{{ diff or 'These prompt versions are identical.' }}</pre></div></section>
+{% endblock %}

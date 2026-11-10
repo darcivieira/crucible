@@ -45,7 +45,7 @@ def test_dashboard_routes(tmp_path):
     assert "novo {input}" in verdicts_response.text
     assert regressions_response.status_code == 200
     assert compare_response.status_code == 200
-    assert "Compare Runs" in compare_response.text
+    assert "Compare runs" in compare_response.text
     assert api_runs_response.status_code == 200
     assert api_runs_response.json()[0]["id"] == run.id
     assert api_run_response.status_code == 200
@@ -322,3 +322,95 @@ def _saved_comparison_run(store: SQLiteRunStore) -> OptimizationRun:
     )
     asyncio.run(store.save_run(run))
     return run
+
+
+def test_dashboard_mode_filter_combines_with_existing_filters(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    optimized = _saved_run(store)
+    compared = _saved_comparison_run(store)
+    client = TestClient(create_dashboard_app(store))
+
+    response = client.get("/?mode=compare&status=completed&min_score=90")
+
+    assert response.status_code == 200
+    assert compared.id in response.text
+    assert optimized.id not in response.text
+    assert 'name="mode" value="compare"' in response.text
+    assert 'aria-current="page">Model comparisons' in response.text
+
+
+def test_scorecard_uses_actual_values_and_correct_improvement_direction(tmp_path):
+    from crucible.modules.optimizer.presentation.web.app import _scorecard
+
+    run = _saved_run(SQLiteRunStore(tmp_path / "runs.sqlite"))
+    run.iterations[0].score_report.operational.total_cost_usd = 0.02
+    run.iterations[1].score_report.operational.total_cost_usd = 0.01
+    run.iterations[0].score_report.operational.p95_latency_ms = 40
+    run.iterations[1].score_report.operational.p95_latency_ms = 80
+
+    score, passed, cost, latency = _scorecard(run)
+
+    assert score["delta"] == 100
+    assert score["tone"] == passed["tone"] == "good"
+    assert cost["delta_text"] == "−$0.0100"
+    assert cost["tone"] == "good"
+    assert cost["direction"] == "negative"
+    assert latency["delta_text"] == "+40 ms"
+    assert latency["tone"] == "bad"
+    assert all(0 <= row["width"] <= 44 for row in (score, passed, cost, latency))
+
+
+def test_scorecard_handles_zero_values_and_empty_runs(tmp_path):
+    from crucible.modules.optimizer.presentation.web.app import _scorecard
+
+    run = _saved_run(SQLiteRunStore(tmp_path / "runs.sqlite"))
+    assert _scorecard(run)[2]["tone"] == "neutral"
+    assert _scorecard(run)[2]["width"] == 0
+    empty = run.model_copy(update={"iterations": []})
+    assert _scorecard(empty) == []
+    assert _scorecard(run, empty) == []
+
+
+def test_regression_filters_apply_to_the_scoped_case_list(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    run = _saved_run(store)
+    run.iterations[1].verdicts[0].is_regression = True
+    asyncio.run(store.save_run(run))
+    client = TestClient(create_dashboard_app(store))
+
+    present = client.get(f"/runs/{run.id}/regressions?case_id=case")
+    filtered = client.get(f"/runs/{run.id}/regressions?case_id=missing")
+
+    assert present.status_code == filtered.status_code == 200
+    assert "No verdicts found" not in present.text
+    assert "No verdicts found" in filtered.text
+
+
+def test_dashboard_static_assets_and_form_labels(tmp_path):
+    client = TestClient(create_dashboard_app(SQLiteRunStore(tmp_path / "runs.sqlite")))
+    response = client.get("/runs/new")
+    assert 'for="prompt-content"' in response.text
+    assert 'id="prompt-content"' in response.text
+    for name, media in [
+        ("dashboard.css", "text/css"),
+        ("dashboard.js", "javascript"),
+        ("favicon.svg", "image/svg+xml"),
+    ]:
+        asset = client.get(f"/static/{name}")
+        assert asset.status_code == 200
+        assert media in asset.headers["content-type"]
+
+
+def test_browser_filters_accept_empty_optional_numeric_inputs(tmp_path):
+    store = SQLiteRunStore(tmp_path / "runs.sqlite")
+    run = _saved_run(store)
+    client = TestClient(create_dashboard_app(store))
+
+    assert client.get("/?target=fake&status=&min_score=").status_code == 200
+    response = client.get(
+        f"/runs/{run.id}/iterations/1/verdicts?case_id=case&passed=&min_score=&max_score="
+    )
+    assert response.status_code == 200
+    assert "No verdicts found" not in response.text
+    assert client.get(f"/runs/{run.id}/regressions?min_score=&max_score=").status_code == 200
+    assert client.get("/?min_score=invalid").status_code == 422

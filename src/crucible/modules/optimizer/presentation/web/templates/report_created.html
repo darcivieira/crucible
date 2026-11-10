@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon %}
+{% set page_label = 'Report' %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Run {{ run.id[:12] }}</div><h1>Report generated</h1><p class="page-description">Your {{ format|upper }} snapshot is ready in the local workspace.</p></div><a class="button secondary" href="/runs/{{ run.id }}">Back to scorecard</a></div>
+<section class="panel"><div class="panel-title"><h2>{{ format|upper }} report</h2>{{ icon('check', 18) }}</div><pre>{{ path }}</pre><p class="help">Open this file on the machine running Crucible to view or share the report.</p>{% if format == 'pdf' and run.status in ['completed', 'failed', 'aborted'] %}<p style="margin-top:16px"><a class="button" href="/runs/{{ run.id }}/reports/pdf/download">{{ icon('download', 14) }}Download PDF</a></p>{% endif %}</section>
+{% endblock %}

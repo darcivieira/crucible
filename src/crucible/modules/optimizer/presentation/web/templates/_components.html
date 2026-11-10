@@ -1,0 +1,42 @@
+{% macro icon(name, size=18) -%}
+<svg class="icon" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{% if name == 'flask' %}<path d="M9 3h6M10 3v6l-6 10a1.4 1.4 0 0 0 1.2 2h13.6a1.4 1.4 0 0 0 1.2-2L14 9V3M8 14h8"/>
+{% elif name == 'grid' %}<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+{% elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
+{% elif name == 'chevron' %}<path d="m9 5 7 7-7 7"/>
+{% elif name == 'down' %}<path d="m6 9 6 6 6-6"/>
+{% elif name == 'check' %}<path d="m5 12 4 4L19 6"/>
+{% elif name == 'chart' %}<path d="M4 4v16h16M7 14l4-5 4 3 5-7"/>
+{% elif name == 'clock' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{% elif name == 'layers' %}<path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5"/>
+{% elif name == 'code' %}<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 20"/>
+{% elif name == 'folder' %}<path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/>
+{% elif name == 'refresh' %}<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-2L20 8M4 16l2.4 3A7 7 0 0 0 18 17"/>
+{% elif name == 'filter' %}<path d="M4 7h16M7 12h10m-7 5h4"/>
+{% elif name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>
+{% elif name == 'download' %}<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>
+{% elif name == 'copy' %}<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/>
+{% elif name == 'info' %}<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>
+{% elif name == 'external' %}<path d="M14 3h7v7m0-7L10 14M10 3H3v18h18v-7"/>
+{% elif name == 'compare' %}<path d="M8 3v18m8-18v18M4 7l4-4 4 4m0 10 4 4 4-4"/>
+{% elif name == 'alert' %}<path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5m0 3v.1"/>
+{% elif name == 'dollar' %}<path d="M12 2v20m5-16H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+{% else %}<circle cx="12" cy="12" r="8"/>{% endif %}
+</svg>
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+<span class="status-badge status--{{ status }}"><span class="status-dot"></span>{{ status|replace('_', ' ')|capitalize }}</span>
+{%- endmacro %}
+
+{% macro run_tabs(run, active) -%}
+<nav class="section-tabs" aria-label="Run views">
+  <a href="/runs/{{ run.id }}" {% if active == 'scorecard' %}aria-current="page"{% endif %}>Scorecard</a>
+  {% if run.iterations %}
+  <a href="/runs/{{ run.id }}/diff" {% if active == 'diff' %}aria-current="page"{% endif %}>Prompt diff</a>
+  <a href="/runs/{{ run.id }}/iterations/{{ run.best_iteration.version }}/verdicts" {% if active == 'verdicts' %}aria-current="page"{% endif %}>Verdicts</a>
+  {% endif %}
+  <a href="/runs/{{ run.id }}/regressions" {% if active == 'regressions' %}aria-current="page"{% endif %}>Regressions</a>
+</nav>
+{%- endmacro %}

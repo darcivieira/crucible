@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% from '_components.html' import icon, status_badge %}
+{% set page_label = 'Task ' ~ task.id[:8] %}
+{% set active = task.status in ['queued', 'running', 'cancel_requested'] %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Run execution</div><h1>Evaluation task {{ status_badge(task.status) }}</h1><p class="page-description mono">{{ task.id }}</p></div><a class="button secondary" href="/">Back to experiments</a></div>
+<section class="panel">
+  <div class="task-progress" {% if active %}aria-busy="true"{% endif %}>
+    {{ icon('flask' if active else 'check' if task.status == 'completed' else 'alert', 28) }}
+    <h2>{% if task.status == 'completed' %}Your results are ready{% elif task.status == 'queued' %}Your run is queued{% elif task.status == 'running' %}Evaluating your prompt{% elif task.status == 'cancel_requested' %}Cancellation requested{% elif task.status == 'cancelled' %}Evaluation cancelled{% else %}This evaluation stopped{% endif %}</h2>
+    <p>{% if active %}This page refreshes automatically while the evaluation is active.{% elif task.status == 'completed' %}Open the scorecard to review quality, cost, and individual cases.{% else %}Review the details below before starting another run.{% endif %}</p>
+    <div class="progress-track {% if active %}is-active{% elif task.status != 'completed' %}is-stopped{% endif %}" {% if active %}role="progressbar" aria-label="Evaluation in progress"{% endif %}><span></span></div>
+    {% if task.run_id %}<a class="button" href="/runs/{{ task.run_id }}">Open scorecard {{ icon('arrow', 14) }}</a>{% endif %}
+  </div>
+  <div class="task-meta"><div><span>Task status</span>{{ status_badge(task.status) }}</div><div><span>Last updated</span><time datetime="{{ task.updated_at }}">{{ task.updated_at[:19]|replace('T', ' ') }}</time></div><div><span>Cancellation requested</span>{{ 'Yes' if task.cancel_requested else 'No' }}</div></div>
+</section>
+{% if task.error %}<div class="error" role="alert"><strong>Evaluation error</strong><p>{{ task.error }}</p></div>{% endif %}
+{% if task.status not in ['completed', 'failed', 'cancelled'] %}<form method="post" action="/tasks/{{ task.id }}/cancel"><button class="danger" type="submit">Cancel task</button></form>{% endif %}
+{% if active %}<script>setTimeout(function () { window.location.reload(); }, 2500);</script>{% endif %}
+{% endblock %}

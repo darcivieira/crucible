@@ -6,15 +6,16 @@ import difflib
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 from urllib.parse import parse_qs
 from uuid import uuid4
 
 import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from jinja2 import DictLoader, Environment, select_autoescape
-from pydantic import ValidationError
+from fastapi.staticfiles import StaticFiles
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import BeforeValidator, ValidationError
 
 from crucible.core.settings import get_settings
 from crucible.modules.optimizer.adapters.compatibility import resolve_benchmark_path
@@ -36,22 +37,32 @@ from crucible.modules.optimizer.domain.models import (
     RunMode,
 )
 
+_WEB_ROOT = Path(__file__).parent
+
+
+def _blank_to_none(value: Any) -> Any:
+    return None if isinstance(value, str) and not value.strip() else value
+
 
 def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
     settings = get_settings()
     run_store = store or SQLiteRunStore(settings.sqlite_path)
     templates = _templates()
     app = FastAPI(title="Crucible Dashboard", version="0.1.0")
+    app.mount("/static", StaticFiles(directory=_WEB_ROOT / "static"), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     async def index(
         request: Request,
         status: str | None = None,
         target: str | None = None,
-        min_score: float | None = None,
+        min_score: Annotated[float | None, BeforeValidator(_blank_to_none)] = None,
+        mode: str | None = None,
     ) -> str:
         all_runs = run_store.list_runs(limit=100)
         runs = all_runs
+        if mode:
+            runs = [run for run in runs if run.run_mode == mode]
         if status:
             runs = [run for run in runs if run.status == status]
         if target:
@@ -69,7 +80,12 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
             request=request,
             runs=runs,
             summary=_index_summary(all_runs),
-            filters={"status": status or "", "target": target or "", "min_score": min_score},
+            filters={
+                "status": status or "",
+                "target": target or "",
+                "min_score": min_score,
+                "mode": mode or "",
+            },
         )
 
     @app.get("/runs/new", response_class=HTMLResponse)
@@ -122,6 +138,7 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
             run=run,
             best=best,
             score_history=[iteration.score for iteration in run.iterations],
+            scorecard=_scorecard(run),
             hint=next_step_hint(
                 run.stop_reason,
                 best.score if best else None,
@@ -142,8 +159,8 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
         regression: str | None = None,
         tag: str | None = None,
         assertion_type: str | None = None,
-        min_score: float | None = None,
-        max_score: float | None = None,
+        min_score: Annotated[float | None, BeforeValidator(_blank_to_none)] = None,
+        max_score: Annotated[float | None, BeforeValidator(_blank_to_none)] = None,
     ) -> str:
         run = await _load_run_or_404(run_store, run_id)
         iteration = _iteration_or_404(run, version)
@@ -175,7 +192,17 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
         )
 
     @app.get("/runs/{run_id}/regressions", response_class=HTMLResponse)
-    async def regressions(request: Request, run_id: str) -> str:
+    async def regressions(
+        request: Request,
+        run_id: str,
+        case_id: str | None = None,
+        passed: str | None = None,
+        regression: str | None = None,
+        tag: str | None = None,
+        assertion_type: str | None = None,
+        min_score: Annotated[float | None, BeforeValidator(_blank_to_none)] = None,
+        max_score: Annotated[float | None, BeforeValidator(_blank_to_none)] = None,
+    ) -> str:
         run = await _load_run_or_404(run_store, run_id)
         verdicts = [
             verdict
@@ -186,8 +213,25 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
             request=request,
             run=run,
             version="regressions",
-            verdicts=verdicts,
-            filters={},
+            verdicts=_filter_verdicts(
+                verdicts,
+                case_id=case_id,
+                passed=passed,
+                regression=regression,
+                tag=tag,
+                assertion_type=assertion_type,
+                min_score=min_score,
+                max_score=max_score,
+            ),
+            filters={
+                "case_id": case_id or "",
+                "passed": passed or "",
+                "regression": regression or "",
+                "tag": tag or "",
+                "assertion_type": assertion_type or "",
+                "min_score": min_score,
+                "max_score": max_score,
+            },
         )
 
     @app.get("/runs/{run_id}/diff", response_class=HTMLResponse)
@@ -262,6 +306,7 @@ def create_dashboard_app(store: SQLiteRunStore | None = None) -> FastAPI:
             right=right_run,
             left_best=left_run.best_iteration,
             right_best=right_run.best_iteration,
+            choices=run_store.list_runs(limit=100),
         )
 
     @app.get("/api/runs")
@@ -435,7 +480,7 @@ def _filter_verdicts(
 
 def _templates() -> Environment:
     env = Environment(
-        loader=DictLoader(_TEMPLATES),
+        loader=FileSystemLoader(_WEB_ROOT / "templates"),
         autoescape=select_autoescape(["html"]),
     )
     env.filters["score"] = _score
@@ -445,6 +490,7 @@ def _templates() -> Environment:
     env.filters["mode_label"] = run_mode_label
     env.filters["pretty_json"] = _pretty_json
     env.globals["model_label"] = _model_label
+    env.globals["scorecard"] = _scorecard
     return env
 
 
@@ -470,614 +516,71 @@ def _pretty_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
-_BASE_STYLE = """
-:root {
-  color-scheme: light;
-  --bg: #f5f7fa;
-  --surface: #ffffff;
-  --surface-soft: #f8fafc;
-  --border: #d9e2ec;
-  --text: #172026;
-  --muted: #5f6f7f;
-  --brand: #0f609b;
-  --brand-strong: #074d7d;
-  --ok: #1f7a4d;
-  --warn: #a15c00;
-  --bad: #b42318;
-}
-* { box-sizing: border-box; }
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 0;
-  color: var(--text);
-  background: var(--bg);
-}
-header {
-  background: #12202f;
-  color: white;
-  padding: 14px 28px;
-}
-header nav {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-header a { color: white; margin-left: 16px; }
-main { padding: 24px 28px; max-width: 1280px; margin: 0 auto; }
-a { color: var(--brand); text-decoration: none; }
-a:hover { text-decoration: underline; }
-h1, h2, h3 { margin: 0 0 12px; line-height: 1.2; }
-p { line-height: 1.5; }
-.muted { color: var(--muted); }
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-}
-.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.button, button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--brand);
-  background: var(--brand);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font: inherit;
-  cursor: pointer;
-}
-.button.secondary, button.secondary {
-  background: white;
-  color: var(--brand);
-}
-.button.danger, button.danger {
-  border-color: var(--bad);
-  background: var(--bad);
-}
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
-  margin: 18px 0;
-}
-.metric {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 14px;
-  border-radius: 8px;
-}
-.metric span { display: block; font-size: 12px; color: var(--muted); }
-.metric strong { display: block; font-size: 24px; margin-top: 4px; }
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
-}
-.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); }
-th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-th { background: #eef2f7; font-size: 12px; text-transform: uppercase; color: var(--muted); }
-tr:hover td { background: #fbfdff; }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 12px;
-  background: #e6f0f8;
-  color: var(--brand-strong);
-}
-.badge.ok { background: #e7f6ee; color: var(--ok); }
-.badge.warn { background: #fff4df; color: var(--warn); }
-.badge.bad { background: #fdecea; color: var(--bad); }
-label { display: block; font-weight: 650; margin-bottom: 6px; }
-input, select, textarea {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font: inherit;
-  background: white;
-  color: var(--text);
-}
-textarea {
-  min-height: 210px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-}
-.help { color: var(--muted); font-size: 13px; margin-top: 4px; }
-.error {
-  border: 1px solid #f4b4ad;
-  background: #fff4f2;
-  color: var(--bad);
-  padding: 12px;
-  border-radius: 8px;
-  margin: 12px 0;
-}
-pre {
-  white-space: pre-wrap;
-  background: #132638;
-  color: #f0f4f8;
-  padding: 14px;
-  overflow: auto;
-  border-radius: 8px;
-}
-details {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--surface-soft);
-}
-summary { cursor: pointer; font-weight: 650; }
-.bar { display: flex; align-items: center; gap: 8px; min-width: 160px; }
-.bar span {
-  display: inline-block;
-  background: var(--brand);
-  height: 10px;
-  min-width: 2px;
-  border-radius: 999px;
-}
-.filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  align-items: end;
-}
-@media (max-width: 820px) {
-  main { padding: 18px 14px; }
-  .page-head, header nav { flex-direction: column; align-items: stretch; }
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  table { display: block; overflow-x: auto; }
-}
-"""
-
-
-_TEMPLATES: Mapping[str, str] = {
-    "base.html": """
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title or "Crucible Dashboard" }}</title>
-  <style>"""
-    + _BASE_STYLE
-    + """</style>
-</head>
-<body>
-  <header>
-    <nav>
-      <div><strong>Crucible</strong> <span class="muted">local dashboard</span></div>
-      <div>
-        <a href="/">Runs</a>
-        <a href="/runs/new">New run</a>
-        <a href="/docs" target="_blank">API docs</a>
-      </div>
-    </nav>
-  </header>
-  <main>{% block content %}{% endblock %}</main>
-</body>
-</html>
-""",
-    "index.html": """
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Runs</h1>
-    <p class="muted">Local history to investigate quality, cost, and regressions.</p>
-  </div>
-  <div class="actions"><a class="button" href="/runs/new">New run</a></div>
-</div>
-<div class="metrics">
-  <div class="metric"><span>Total</span><strong>{{ summary.total }}</strong></div>
-  <div class="metric"><span>In progress</span><strong>{{ summary.running }}</strong></div>
-  <div class="metric"><span>Completed</span><strong>{{ summary.completed }}</strong></div>
-  <div class="metric"><span>Best score</span><strong>{{ summary.best_score|score }}</strong></div>
-  <div class="metric"><span>Total cost</span><strong>{{ summary.total_cost|money }}</strong></div>
-</div>
-<form method="get" class="panel filters">
-  <div><label>Status</label><input name="status" value="{{ filters.status }}"></div>
-  <div><label>Model</label><input name="target" value="{{ filters.target }}"></div>
-  <div><label>Minimum score</label><input name="min_score" type="number" step="0.1" value="{{ filters.min_score or '' }}"></div>
-  <div><button type="submit">Filter</button></div>
-</form>
-<table>
-  <thead>
-    <tr><th>Run</th><th>Mode</th><th>Status</th><th>Best</th><th>Cost</th><th>Target</th><th>Stop reason</th><th>Started</th></tr>
-  </thead>
-  <tbody>
-  {% for run in runs %}
-    <tr>
-      <td><a href="/runs/{{ run.id }}">{{ run.id[:12] }}</a><br><span class="muted">{{ run.id }}</span></td>
-      <td><span class="badge">{{ run.run_mode|mode_label }}</span></td>
-      <td><span class="badge {% if run.status == 'completed' %}ok{% elif run.status in ['failed', 'aborted'] %}bad{% else %}warn{% endif %}">{{ run.status }}</span></td>
-      <td>{{ run.best_score|score }}</td>
-      <td>{{ run.total_cost_usd|money }}</td>
-      <td>{{ run.target_model }}</td>
-      <td>{{ run.stop_reason|stop_label }}</td>
-      <td>{{ run.started_at }}</td>
-    </tr>
-  {% else %}
-    <tr><td colspan="8">No runs found.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endblock %}
-""",
-    "new_run.html": """
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>New run</h1>
-    <p class="muted">Create quick validations or full optimizations from local files or edited content.</p>
-  </div>
-  <div class="actions"><a class="button secondary" href="/">Back</a></div>
-</div>
-{% for error in errors %}<div class="error">{{ error }}</div>{% endfor %}
-<form method="post">
-  <section class="panel">
-    <div class="grid-3">
-      <div>
-        <label>Mode</label>
-        <select name="mode">
-          <option value="optimize" {% if values.mode == 'optimize' %}selected{% endif %}>Optimize</option>
-          <option value="validate" {% if values.mode == 'validate' %}selected{% endif %}>Validate</option>
-          <option value="compare" {% if values.mode == 'compare' %}selected{% endif %}>Compare models</option>
-        </select>
-        <div class="help">Validate measures the current prompt. Optimize tries to generate better versions. Compare runs one version per model in comparison_models.</div>
-      </div>
-      <div>
-        <label>Prompt path</label>
-        <input name="prompt_path" value="{{ values.prompt_path }}">
-      </div>
-      <div>
-        <label>Benchmark path</label>
-        <input name="benchmark_path" value="{{ values.benchmark_path }}">
-      </div>
-    </div>
-  </section>
-  <section class="grid-2">
-    <div class="panel">
-      <label>Prompt</label>
-      <textarea name="prompt_content">{{ values.prompt_content }}</textarea>
-      <div class="help">When provided, this content takes precedence over the specified path.</div>
-    </div>
-    <div class="panel">
-      <label>Benchmark YAML/JSON</label>
-      <textarea name="benchmark_content">{{ values.benchmark_content }}</textarea>
-      <div class="help">Cases, expected_output, assertion, weights, and tags belong here.</div>
-    </div>
-  </section>
-  <section class="panel">
-    <div class="grid-2">
-      <div>
-        <label>Config path</label>
-        <input name="config_path" value="{{ values.config_path }}">
-      </div>
-      <div>
-        <label>Config YAML</label>
-        <div class="help">This editor covers all run parameters: models, budgets, output_format, split, judge, rate limit, and multi-objective.</div>
-      </div>
-    </div>
-    <textarea name="config_content">{{ values.config_content }}</textarea>
-  </section>
-  <section class="panel">
-    <h2>Understanding the parameters</h2>
-    <div class="grid-3">
-      <p><strong>threshold</strong><br><span class="muted">Global stopping score on a 0-100 scale.</span></p>
-      <p><strong>max_iterations</strong><br><span class="muted">Maximum number of versions, including v0.</span></p>
-      <p><strong>output_format</strong><br><span class="muted">Contract requested from the provider; the assertion checks whether it was met.</span></p>
-      <p><strong>use_benchmark_split</strong><br><span class="muted">Splits train/val/test to reduce overfitting.</span></p>
-      <p><strong>rate_limit</strong><br><span class="muted">Controls concurrency and retries per model.</span></p>
-      <p><strong>field_by_field.weights</strong><br><span class="muted">Belongs in the benchmark, not in the config.</span></p>
-    </div>
-  </section>
-  <div class="actions">
-    <button type="submit">Start run</button>
-    <a class="button secondary" href="/">Cancel</a>
-  </div>
-</form>
-{% endblock %}
-""",
-    "task.html": """
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Task {{ task.id[:12] }}</h1>
-    <p class="muted">Status updated after each background execution.</p>
-  </div>
-  <div class="actions"><a class="button secondary" href="/">Runs</a></div>
-</div>
-<div class="metrics">
-  <div class="metric"><span>Status</span><strong>{{ task.status }}</strong></div>
-  <div class="metric"><span>Run</span><strong>{% if task.run_id %}<a href="/runs/{{ task.run_id }}">open</a>{% else %}-{% endif %}</strong></div>
-  <div class="metric"><span>Cancellation</span><strong>{{ "yes" if task.cancel_requested else "no" }}</strong></div>
-  <div class="metric"><span>Updated</span><strong>{{ task.updated_at }}</strong></div>
-</div>
-{% if task.error %}<div class="error">{{ task.error }}</div>{% endif %}
-{% if task.status not in ["completed", "failed", "cancelled"] %}
-<form method="post" action="/tasks/{{ task.id }}/cancel"><button class="danger" type="submit">Cancel task</button></form>
-{% endif %}
-{% if task.status in ["queued", "running", "cancel_requested"] %}
-<script>setTimeout(function(){ window.location.reload(); }, 2500);</script>
-{% endif %}
-{% endblock %}
-""",
-    "run.html": """
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <p><a href="/">Runs</a></p>
-    <h1>Run {{ run.id[:12] }}</h1>
-    <p class="muted">{{ mode_label }} · {{ stop_label }} · {{ run.id }}</p>
-  </div>
-  <div class="actions">
-    <a class="button secondary" href="/runs/{{ run.id }}/diff">Diff v0 → best</a>
-    <a class="button secondary" href="/runs/{{ run.id }}/regressions">Regressions</a>
-    <a class="button secondary" href="/runs/{{ run.id }}/reports/html">Report HTML</a>
-    {% if run.status in ["completed", "failed", "aborted"] %}
-    <a class="button secondary" href="/runs/{{ run.id }}/reports/pdf/download">Download PDF</a>
-    {% endif %}
-    <a class="button secondary" href="/api/runs/{{ run.id }}">JSON</a>
-  </div>
-</div>
-<div class="metrics">
-  <div class="metric"><span>Status</span><strong>{{ run.status }}</strong></div>
-  <div class="metric"><span>Best score</span><strong>{{ best.score|score if best else "-" }}</strong></div>
-  <div class="metric"><span>Pass rate</span><strong>{{ best.score_report.pass_rate|percent if best else "-" }}</strong></div>
-  <div class="metric"><span>Threshold</span><strong>{{ run.config.threshold|score }}</strong></div>
-  <div class="metric"><span>Cost</span><strong>{{ run.total_cost_usd|money }}</strong></div>
-  <div class="metric"><span>p95 latency</span><strong>{{ "%.0f ms"|format(best.score_report.operational.p95_latency_ms) if best else "-" }}</strong></div>
-</div>
-<div class="panel">
-  <h2>Suggested next step</h2>
-  <p>{{ hint }}</p>
-  <p class="muted">Target: {{ model_label(run.config.target_model) }} · Reasoning: {{ model_label(run.config.reasoning_model) }}</p>
-</div>
-{% if run.comparison_summary %}
-<div class="metrics">
-  <div class="metric"><span>Best score</span><strong>{{ run.comparison_summary.best_score.label }}</strong></div>
-  <div class="metric"><span>Lowest cost</span><strong>{{ run.comparison_summary.lowest_cost.label }}</strong></div>
-  <div class="metric"><span>Best value</span><strong>{{ run.comparison_summary.best_value.label }}</strong></div>
-</div>
-<section class="panel">
-  <h2>Model comparison</h2>
-  <table>
-    <thead><tr><th>Model</th><th>Score</th><th>Pass rate</th><th>Cost</th><th>p95</th><th>Cached tokens</th></tr></thead>
-    <tbody>
-    {% for iteration in run.iterations %}
-      <tr>
-        <td>{{ iteration.comparison_label or ("v" ~ iteration.version) }}</td>
-        <td>{{ iteration.score|score }}</td>
-        <td>{{ iteration.score_report.pass_rate|percent }}</td>
-        <td>{{ iteration.score_report.operational.total_cost_usd|money }}</td>
-        <td>{{ "%.0f ms"|format(iteration.score_report.operational.p95_latency_ms) }}</td>
-        <td>{{ iteration.score_report.operational.cached_tokens }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <details>
-    <summary>Winners by case</summary>
-    <table>
-      <thead><tr><th>Case</th><th>Score</th><th>Cost</th><th>Value</th></tr></thead>
-      <tbody>
-      {% for winner in run.comparison_summary.case_winners %}
-        <tr><td>{{ winner.test_case_id }}</td><td>{{ winner.best_score }}</td><td>{{ winner.lowest_cost }}</td><td>{{ winner.best_value }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </details>
-</section>
-{% endif %}
-{% if run.task_contract %}
-<div class="panel">
-  <h2>Task contract</h2>
-  <p class="muted">{{ run.task_contract.objective }}</p>
-  {% if run.task_contract.literal_extraction_fields %}
-    <p><strong>Literal extraction:</strong> {{ run.task_contract.literal_extraction_fields|join(", ") }}</p>
-  {% endif %}
-  <details>
-    <summary>View invariants</summary>
-    <ul>
-      {% for rule in run.task_contract.invariants %}
-        <li>{{ rule.text }} <span class="muted">({{ rule.source }})</span></li>
-      {% endfor %}
-      {% for rule in run.task_contract.negative_rules %}
-        <li>{{ rule.text }} <span class="muted">({{ rule.source }})</span></li>
-      {% endfor %}
-    </ul>
-  </details>
-</div>
-{% endif %}
-<div class="grid-2">
-  <section class="panel">
-    <h2>Progress</h2>
-    {% for iteration in run.iterations %}
-      <div class="bar">
-        <a href="/runs/{{ run.id }}/iterations/{{ iteration.version }}/verdicts">v{{ iteration.version }}</a>
-        <span style="width: {{ iteration.score }}%;"></span>
-        <strong>{{ iteration.score|score }}</strong>
-      </div>
-    {% endfor %}
-  </section>
-  <section class="panel">
-    <h2>Where to look first</h2>
-    {% if best and best.score_report.worst_case_ids %}
-      <p><strong>Worst cases:</strong> {{ best.score_report.worst_case_ids|join(", ") }}</p>
-    {% else %}
-      <p class="muted">No worst cases recorded.</p>
-    {% endif %}
-    {% if weak_tags %}
-      <p><strong>Weakest tags:</strong></p>
-      <ul>{% for tag, score in weak_tags %}<li>{{ tag }}: {{ score|score }}</li>{% endfor %}</ul>
-    {% endif %}
-  </section>
-</div>
-<h2>Iterations</h2>
-<table>
-  <thead>
-    <tr><th>Version</th><th>Score</th><th>Pass rate</th><th>Cost</th><th>p95</th><th>Change</th><th>Actions</th></tr>
-  </thead>
-  <tbody>
-  {% for iteration in run.iterations %}
-    <tr>
-      <td>v{{ iteration.version }}</td>
-      <td>{{ iteration.score|score }}</td>
-      <td>{{ iteration.score_report.pass_rate|percent }}</td>
-      <td>{{ iteration.score_report.operational.total_cost_usd|money }}</td>
-      <td>{{ "%.0f ms"|format(iteration.score_report.operational.p95_latency_ms) }}</td>
-      <td>
-        {{ iteration.diff_summary or "-" }}
-        {% if iteration.refinement_repair_attempts %}
-          <br><span class="badge warn">{{ iteration.refinement_repair_attempts|length }} repair(s)</span>
-          <details>
-            <summary>Reasoning attempts</summary>
-            <ol>
-              {% for attempt in iteration.refinement_repair_attempts %}
-                <li>
-                  <strong>#{{ attempt.attempt }}</strong>:
-                  {{ attempt.violations|join("; ") }}
-                  {% if attempt.diff_summary %}
-                    <br><span class="muted">{{ attempt.diff_summary }}</span>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ol>
-          </details>
-        {% endif %}
-        {% if iteration.refinement_rejected_reason %}
-          <br><span class="badge bad">refinement rejected</span>
-          <br><span class="muted">{{ iteration.refinement_rejected_reason }}</span>
-        {% endif %}
-      </td>
-      <td>
-        <a href="/runs/{{ run.id }}/iterations/{{ iteration.version }}/verdicts">Verdicts</a>
-        · <a href="/runs/{{ run.id }}/diff?from_version=0&to_version={{ iteration.version }}">Diff</a>
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-<section class="panel">
-  <h2>Best prompt</h2>
-  <pre>{{ best.prompt.template if best else "" }}</pre>
-</section>
-{% endblock %}
-""",
-    "verdicts.html": """
-{% extends "base.html" %}
-{% block content %}
-<div class="page-head">
-  <div>
-    <p><a href="/runs/{{ run.id }}">Run {{ run.id[:12] }}</a></p>
-    <h1>Verdicts {{ version }}</h1>
-    <p class="muted">Filter failures, regressions, and assertions to find the first actionable issue.</p>
-  </div>
-</div>
-{% if iteration is defined %}
-  <section class="panel">
-    <h2>Prompt used</h2>
-    <p class="muted">
-      This is the prompt from v{{ iteration.version }} used to execute all the cases
-      listed below. A placeholder such as <code>{input}</code> is filled with the
-      input of each case during execution.
-    </p>
-    <pre>{{ iteration.prompt.template }}</pre>
-  </section>
-{% endif %}
-<form method="get" class="panel filters">
-  <div><label>Case</label><input name="case_id" value="{{ filters.case_id }}"></div>
-  <div><label>Passed</label><select name="passed"><option value=""></option><option value="true" {% if filters.passed == 'true' %}selected{% endif %}>true</option><option value="false" {% if filters.passed == 'false' %}selected{% endif %}>false</option></select></div>
-  <div><label>Regression</label><select name="regression"><option value=""></option><option value="true" {% if filters.regression == 'true' %}selected{% endif %}>true</option><option value="false" {% if filters.regression == 'false' %}selected{% endif %}>false</option></select></div>
-  <div><label>Tag</label><input name="tag" value="{{ filters.tag }}"></div>
-  <div><label>Assertion</label><input name="assertion_type" value="{{ filters.assertion_type }}"></div>
-  <div><label>Min score</label><input name="min_score" type="number" step="0.01" value="{{ filters.min_score or '' }}"></div>
-  <div><label>Max score</label><input name="max_score" type="number" step="0.01" value="{{ filters.max_score or '' }}"></div>
-  <div><button type="submit">Filter</button></div>
-</form>
-<table>
-  <thead>
-    <tr><th>Case</th><th>Score</th><th>Passed</th><th>Regression</th><th>Assertion</th><th>Latency</th><th>Tags</th></tr>
-  </thead>
-  <tbody>
-  {% for verdict in verdicts %}
-    <tr>
-      <td>
-        <details>
-          <summary>{{ verdict.test_case.id }}</summary>
-          <h3>Input</h3><pre>{{ verdict.test_case.input }}</pre>
-          <h3>Expected</h3><pre>{{ verdict.test_case.expected_output }}</pre>
-          <h3>Actual</h3><pre>{{ verdict.execution.actual_output }}</pre>
-          <h3>Assertion detail</h3><pre>{{ verdict.assertion_detail|pretty_json }}</pre>
-        </details>
-      </td>
-      <td>{{ verdict.score|score }}</td>
-      <td><span class="badge {% if verdict.passed %}ok{% else %}bad{% endif %}">{{ verdict.passed }}</span></td>
-      <td>{{ verdict.is_regression }}</td>
-      <td>{{ verdict.test_case.assertion.type }}</td>
-      <td>{{ "%.0f ms"|format(verdict.execution.latency_ms) }}</td>
-      <td>{{ verdict.test_case.tags|join(", ") }}</td>
-    </tr>
-  {% else %}
-    <tr><td colspan="7">No verdicts found.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endblock %}
-""",
-    "diff.html": """
-{% extends "base.html" %}
-{% block content %}
-<p><a href="/runs/{{ run.id }}">Run {{ run.id[:12] }}</a></p>
-<h1>Diff v{{ left.version }} → v{{ right.version }}</h1>
-<form method="get" class="panel filters">
-  <div><label>From</label><input name="from_version" type="number" value="{{ left.version }}"></div>
-  <div><label>To</label><input name="to_version" value="{{ right.version }}"></div>
-  <div><button type="submit">Update</button></div>
-</form>
-<pre>{{ diff }}</pre>
-{% endblock %}
-""",
-    "report_created.html": """
-{% extends "base.html" %}
-{% block content %}
-<p><a href="/runs/{{ run.id }}">Run {{ run.id[:12] }}</a></p>
-<h1>Report {{ format }}</h1>
-<div class="panel">
-  <p>Report generated at:</p>
-  <pre>{{ path }}</pre>
-</div>
-{% endblock %}
-""",
-    "compare.html": """
-{% extends "base.html" %}
-{% block content %}
-<p><a href="/">Runs</a></p>
-<h1>Compare Runs</h1>
-<table>
-  <thead><tr><th>Metric</th><th>{{ left.id[:12] }}</th><th>{{ right.id[:12] }}</th></tr></thead>
-  <tbody>
-    <tr><td>Best score</td><td>{{ left_best.score|score if left_best else "-" }}</td><td>{{ right_best.score|score if right_best else "-" }}</td></tr>
-    <tr><td>Pass rate</td><td>{{ left_best.score_report.pass_rate|percent if left_best else "-" }}</td><td>{{ right_best.score_report.pass_rate|percent if right_best else "-" }}</td></tr>
-    <tr><td>Iterations</td><td>{{ left.iterations|length }}</td><td>{{ right.iterations|length }}</td></tr>
-    <tr><td>Cost</td><td>{{ left.total_cost_usd|money }}</td><td>{{ right.total_cost_usd|money }}</td></tr>
-    <tr><td>Stop reason</td><td>{{ left.stop_reason|stop_label }}</td><td>{{ right.stop_reason|stop_label }}</td></tr>
-  </tbody>
-</table>
-{% endblock %}
-""",
-}
+def _scorecard(run: OptimizationRun, other: OptimizationRun | None = None) -> list[dict[str, Any]]:
+    if not run.iterations or run.best_iteration is None:
+        return []
+    baseline = run.best_iteration if other is not None else run.iterations[0]
+    selected = other.best_iteration if other is not None else run.best_iteration
+    if selected is None:
+        return []
+    metrics = [
+        ("Quality score", baseline.score, selected.score, "score", True),
+        (
+            "Pass rate",
+            baseline.score_report.pass_rate,
+            selected.score_report.pass_rate,
+            "percent",
+            True,
+        ),
+        (
+            "Cost",
+            baseline.score_report.operational.total_cost_usd,
+            selected.score_report.operational.total_cost_usd,
+            "money",
+            False,
+        ),
+        (
+            "p95 latency",
+            baseline.score_report.operational.p95_latency_ms,
+            selected.score_report.operational.p95_latency_ms,
+            "latency",
+            False,
+        ),
+    ]
+    rows = []
+    for label, before, after, unit, higher_is_better in metrics:
+        delta = after - before
+        scale = (
+            100.0 if unit == "score" else 1.0 if unit == "percent" else max(before, after, 0.000001)
+        )
+        sign = "+" if delta > 0 else "−" if delta < 0 else ""
+        magnitude = abs(delta)
+        if unit == "money":
+            before_text, after_text = _money(before), _money(after)
+            delta_text = f"{sign}${magnitude:.4f}"
+        elif unit == "latency":
+            before_text, after_text = f"{before:.0f} ms", f"{after:.0f} ms"
+            delta_text = f"{sign}{magnitude:.0f} ms"
+        elif unit == "percent":
+            before_text, after_text = _percent(before), _percent(after)
+            delta_text = f"{sign}{magnitude * 100:.1f} pp"
+        else:
+            before_text, after_text = _score(before), _score(after)
+            delta_text = f"{sign}{magnitude:.2f} pts"
+        rows.append(
+            {
+                "label": label,
+                "before": before_text,
+                "after": after_text,
+                "delta": delta,
+                "delta_text": delta_text,
+                "width": min(44.0, magnitude / scale * 44.0),
+                "direction": "positive" if delta > 0 else "negative",
+                "tone": "neutral"
+                if delta == 0
+                else "good"
+                if (delta > 0) == higher_is_better
+                else "bad",
+            }
+        )
+    return rows
